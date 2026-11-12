@@ -1,0 +1,51 @@
+"""Data models for RepoDoctor scan results and findings.
+
+These models are deliberately plain dataclasses: the scanner builds
+them, the check functions read them, and the reporters render them.
+Keeping them separate from I/O makes them easy to test.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Literal
+
+Severity = Literal["info", "warning", "error"]
+
+
+@dataclass(frozen=True)
+class Finding:
+    """One observation about a scanned repository.
+
+    ``code`` is a stable machine-readable identifier (for example
+    ``"missing-readme"``) so CI consumers can filter on it.
+    ``severity`` is ``"info"``, ``"warning"`` or ``"error"``.
+    """
+
+    code: str
+    message: str
+    severity: Severity = "warning"
+    path: Path | None = None
+
+
+@dataclass
+class ScanResult:
+    """Basic, read-only facts collected about a target directory.
+
+    ``files`` holds paths relative to ``target`` so results stay
+    portable and never leak absolute paths into JSON output.
+    """
+
+    target: Path
+    total_files: int = 0
+    python_files: int = 0
+    has_readme: bool = False
+    readme_path: Path | None = None
+    files: list[Path] = field(default_factory=list)
+    findings: list[Finding] = field(default_factory=list)
+
+    @property
+    def has_python_files(self) -> bool:
+        """Return True when at least one ``.py`` file was found."""
+        return self.python_files > 0
