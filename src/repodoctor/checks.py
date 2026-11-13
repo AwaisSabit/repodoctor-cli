@@ -44,12 +44,72 @@ def check_empty(result: ScanResult) -> Finding | None:
     )
 
 
-#: Day 1 check set, in the order findings are reported.
-CHECKS = (check_empty, check_readme, check_python_files)
+def check_gitignore(result: ScanResult) -> Finding | None:
+    """Warn when there is no .gitignore, or it misses common exclusions."""
+    if not result.has_gitignore:
+        return Finding(
+            code="missing-gitignore",
+            message=(
+                "No .gitignore file found. Add one so virtual environments "
+                "and cache files are not committed by accident."
+            ),
+            severity="warning",
+        )
+    if result.gitignore_missing_exclusions:
+        missing = ", ".join(result.gitignore_missing_exclusions)
+        return Finding(
+            code="gitignore-missing-exclusions",
+            message=(
+                f"The .gitignore file is missing common Python exclusions: "
+                f"{missing}."
+            ),
+            severity="warning",
+        )
+    return None
+
+
+def check_dependency_file(result: ScanResult) -> Finding | None:
+    """Warn when no dependency/packaging file exists."""
+    if result.dependency_file is not None:
+        return None
+    return Finding(
+        code="missing-dependency-file",
+        message=(
+            "No dependency file found (pyproject.toml, requirements.txt, "
+            "setup.py or setup.cfg). Add one so others can install this "
+            "project's dependencies."
+        ),
+        severity="warning",
+    )
+
+
+def check_tests(result: ScanResult) -> Finding | None:
+    """Warn when no tests directory or test files exist."""
+    if result.has_tests:
+        return None
+    return Finding(
+        code="missing-tests",
+        message=(
+            "No tests directory or test files found. Add a tests/ folder "
+            "with at least one test so changes can be checked."
+        ),
+        severity="warning",
+    )
+
+
+#: The check set, in the order findings are reported.
+CHECKS = (
+    check_empty,
+    check_readme,
+    check_python_files,
+    check_gitignore,
+    check_dependency_file,
+    check_tests,
+)
 
 
 def run_checks(result: ScanResult) -> list[Finding]:
-    """Run all Day 1 checks against ``result`` and return findings."""
+    """Run all checks against ``result`` and return findings."""
     findings: list[Finding] = []
     for check in CHECKS:
         finding = check(result)

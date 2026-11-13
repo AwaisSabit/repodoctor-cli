@@ -14,11 +14,22 @@ from .models import ScanResult
 
 def format_summary(result: ScanResult) -> str:
     """Return a short human-readable summary of a scan."""
+    gitignore = (
+        f"yes ({result.gitignore_path})"
+        if result.has_gitignore
+        else "no"
+    )
+    dependency = (
+        str(result.dependency_file) if result.dependency_file else "no"
+    )
     lines = [
         f"RepoDoctor — {result.target}",
         f"  Files:        {result.total_files}",
         f"  Python files: {result.python_files}",
         f"  README:       {'yes' + (f' ({result.readme_path})' if result.readme_path else '') if result.has_readme else 'no'}",
+        f"  Gitignore:    {gitignore}",
+        f"  Dependency:   {dependency}",
+        f"  Test files:   {result.test_files}",
     ]
     if result.findings:
         lines.append("  Findings:")
@@ -37,6 +48,18 @@ def format_json(result: ScanResult) -> str:
         "python_files": result.python_files,
         "has_readme": result.has_readme,
         "readme_path": str(result.readme_path) if result.readme_path else None,
+        "has_gitignore": result.has_gitignore,
+        "gitignore_path": (
+            str(result.gitignore_path) if result.gitignore_path else None
+        ),
+        "gitignore_missing_exclusions": list(
+            result.gitignore_missing_exclusions
+        ),
+        "dependency_file": (
+            str(result.dependency_file) if result.dependency_file else None
+        ),
+        "test_files": result.test_files,
+        "has_tests": result.has_tests,
         "findings": [
             {
                 "code": finding.code,

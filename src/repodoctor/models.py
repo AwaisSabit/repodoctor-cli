@@ -42,6 +42,11 @@ class ScanResult:
     python_files: int = 0
     has_readme: bool = False
     readme_path: Path | None = None
+    has_gitignore: bool = False
+    gitignore_path: Path | None = None
+    gitignore_missing_exclusions: list[str] = field(default_factory=list)
+    dependency_file: Path | None = None
+    test_files: int = 0
     files: list[Path] = field(default_factory=list)
     findings: list[Finding] = field(default_factory=list)
 
@@ -49,3 +54,8 @@ class ScanResult:
     def has_python_files(self) -> bool:
         """Return True when at least one ``.py`` file was found."""
         return self.python_files > 0
+
+    @property
+    def has_tests(self) -> bool:
+        """Return True when at least one test file was found."""
+        return self.test_files > 0

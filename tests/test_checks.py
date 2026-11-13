@@ -1,0 +1,227 @@
+"""Tests for the .gitignore, dependency-file and test-structure checks."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+
+from repodoctor.checks import run_checks
+from repodoctor.cli import main
+from repodoctor.scanner import scan_path
+
+FULL_GITIGNORE = ".venv/\n__pycache__/\n"
+
+
+def _codes(findings) -> list[str]:
+    return [finding.code for finding in findings]
+
+
+def _healthy_folder(tmp_path: Path) -> Path:
+    """Build a folder that passes every check."""
+    (tmp_path / "README.md").write_text("# Example\n", encoding="utf-8")
+    (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
+    (tmp_path / ".gitignore").write_text(FULL_GITIGNORE, encoding="utf-8")
+    (tmp_path / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "test_app.py").write_text(
+        "def test_nothing():\n    pass\n", encoding="utf-8"
+    )
+    return tmp_path
+
+
+# --- .gitignore check ---
+
+
+def test_gitignore_missing_warns(tmp_path: Path) -> None:
+    """A folder with no .gitignore gets the missing-gitignore warning."""
+    (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
+
+    result = scan_path(tmp_path)
+    findings = run_checks(result)
+
+    assert result.has_gitignore is False
+    assert "missing-gitignore" in _codes(findings)
+
+
+def test_gitignore_present_with_both_exclusions_passes(
+    tmp_path: Path,
+) -> None:
+    """A .gitignore with .venv/ and __pycache__/ produces no finding."""
+    (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
+    (tmp_path / ".gitignore").write_text(FULL_GITIGNORE, encoding="utf-8")
+
+    result = scan_path(tmp_path)
+    findings = run_checks(result)
+
+    assert result.has_gitignore is True
+    assert result.gitignore_path == Path(".gitignore")
+    assert result.gitignore_missing_exclusions == []
+    assert "missing-gitignore" not in _codes(findings)
+    assert "gitignore-missing-exclusions" not in _codes(findings)
+
+
+def test_gitignore_missing_pycache_exclusion_warns(tmp_path: Path) -> None:
+    """A .gitignore with only .venv/ warns about __pycache__/."""
+    (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
+    (tmp_path / ".gitignore").write_text(".venv/\n", encoding="utf-8")
+
+    result = scan_path(tmp_path)
+    findings = run_checks(result)
+
+    assert result.gitignore_missing_exclusions == ["__pycache__/"]
+    codes = _codes(findings)
+    assert "gitignore-missing-exclusions" in codes
+    assert "missing-gitignore" not in codes
+    message = next(
+        f.message for f in findings if f.code == "gitignore-missing-exclusions"
+    )
+    assert "__pycache__/" in message
+
+
+def test_gitignore_missing_venv_exclusion_warns(tmp_path: Path) -> None:
+    """A .gitignore with only __pycache__/ warns about .venv/."""
+    (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
+    (tmp_path / ".gitignore").write_text("__pycache__/\n", encoding="utf-8")
+
+    result = scan_path(tmp_path)
+
+    assert result.gitignore_missing_exclusions == [".venv/"]
+    assert "gitignore-missing-exclusions" in _codes(run_checks(result))
+
+
+def test_gitignore_entries_without_slash_still_count(tmp_path: Path) -> None:
+    """Entries written as `.venv` and `__pycache__` (no slash) count."""
+    (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
+    (tmp_path / ".gitignore").write_text(
+        ".venv\n__pycache__\n", encoding="utf-8"
+    )
+
+    result = scan_path(tmp_path)
+
+    assert result.gitignore_missing_exclusions == []
+
+
+# --- Dependency / packaging check ---
+
+
+def test_dependency_file_missing_warns(tmp_path: Path) -> None:
+    """A folder with no dependency file gets the warning."""
+    (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
+
+    result = scan_path(tmp_path)
+
+    assert result.dependency_file is None
+    assert "missing-dependency-file" in _codes(run_checks(result))
+
+
+@pytest.mark.parametrize(
+    "name", ["pyproject.toml", "requirements.txt", "setup.py", "setup.cfg"]
+)
+def test_each_dependency_file_counts(tmp_path: Path, name: str) -> None:
+    """Each recognised dependency file is found and passes the check."""
+    (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
+    (tmp_path / name).write_text("# dependencies\n", encoding="utf-8")
+
+    result = scan_path(tmp_path)
+    findings = run_checks(result)
+
+    assert result.dependency_file == Path(name)
+    assert "missing-dependency-file" not in _codes(findings)
+
+
+def test_pyproject_preferred_when_several_exist(tmp_path: Path) -> None:
+    """When several dependency files exist, pyproject.toml is reported."""
+    (tmp_path / "requirements.txt").write_text("pytest\n", encoding="utf-8")
+    (tmp_path / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
+
+    result = scan_path(tmp_path)
+
+    assert result.dependency_file == Path("pyproject.toml")
+
+
+# --- Test-structure check ---
+
+
+def test_tests_missing_warns(tmp_path: Path) -> None:
+    """A folder with no tests directory or test files gets the warning."""
+    (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
+
+    result = scan_path(tmp_path)
+
+    assert result.test_files == 0
+    assert result.has_tests is False
+    assert "missing-tests" in _codes(run_checks(result))
+
+
+def test_tests_directory_counts(tmp_path: Path) -> None:
+    """Two files under tests/ count as two test files and pass."""
+    (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "test_a.py").write_text("x = 1\n", encoding="utf-8")
+    (tmp_path / "tests" / "test_b.py").write_text("x = 1\n", encoding="utf-8")
+
+    result = scan_path(tmp_path)
+    findings = run_checks(result)
+
+    assert result.test_files == 2
+    assert result.has_tests is True
+    assert "missing-tests" not in _codes(findings)
+
+
+def test_test_file_at_root_counts(tmp_path: Path) -> None:
+    """A test_*.py file at the root counts as a test file."""
+    (tmp_path / "test_app.py").write_text("x = 1\n", encoding="utf-8")
+
+    result = scan_path(tmp_path)
+
+    assert result.test_files == 1
+    assert "missing-tests" not in _codes(run_checks(result))
+
+
+# --- Wiring: healthy folder and CLI output ---
+
+
+def test_healthy_folder_has_no_findings(tmp_path: Path) -> None:
+    """A folder passing every check reports no findings at all."""
+    result = scan_path(_healthy_folder(tmp_path))
+
+    assert run_checks(result) == []
+    assert result.dependency_file == Path("pyproject.toml")
+    assert result.test_files == 1
+
+
+def test_cli_text_output_shows_new_checks(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Text output lists the new findings and the new summary lines."""
+    (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
+
+    assert main([str(tmp_path)]) == 0
+
+    out = capsys.readouterr().out
+    assert "missing-gitignore" in out
+    assert "missing-dependency-file" in out
+    assert "missing-tests" in out
+    assert "Gitignore:    no" in out
+    assert "Dependency:   no" in out
+    assert "Test files:   0" in out
+
+
+def test_cli_json_output_shows_new_facts(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """JSON output carries the new gitignore/dependency/test facts."""
+    _healthy_folder(tmp_path)
+
+    assert main([str(tmp_path), "--format", "json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["has_gitignore"] is True
+    assert payload["gitignore_path"] == ".gitignore"
+    assert payload["gitignore_missing_exclusions"] == []
+    assert payload["dependency_file"] == "pyproject.toml"
+    assert payload["test_files"] == 1
+    assert payload["has_tests"] is True
+    assert payload["findings"] == []

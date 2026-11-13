@@ -4,14 +4,14 @@ A command-line repository health checker for Python projects.
 
 RepoDoctor scans a folder **read-only** — it never modifies, deletes, or
 executes anything in the scanned repository — and reports basic project
-hygiene: how many files and Python files it found, whether a README
-exists, and any simple findings (for example, a missing README).
+hygiene: how many files and Python files it found, whether a README,
+a `.gitignore`, a dependency file and tests exist, and any simple
+findings (for example, a missing README).
 
 > Built as part of a 30-day portfolio challenge, Nov–Dec 2026.
-> This is the working skeleton: package layout, CLI entry point,
-> read-only scanner, basic checks, text/JSON output, and pytest tests.
-> More checks (dependency files, test layout, large files, syntax
-> checks, strict mode) are planned.
+> This is the working tool: package layout, CLI entry point,
+> read-only scanner, six checks, text/JSON output, and pytest tests.
+> More checks (large files, syntax checks, strict mode) are planned.
 
 ## Problem
 
@@ -46,9 +46,12 @@ Example output (`repodoctor .` on this repository):
 
 ```text
 RepoDoctor — /home/awais/repodoctor-cli
-  Files:        19
-  Python files: 9
+  Files:        21
+  Python files: 10
   README:       yes (README.md)
+  Gitignore:    yes (.gitignore)
+  Dependency:   pyproject.toml
+  Test files:   3
   Findings:     none
 ```
 
@@ -61,6 +64,12 @@ does not exist.
 - README exists
 - The directory is not empty
 - At least one Python file exists (informational)
+- A `.gitignore` file exists, and it contains the common Python
+  exclusions `.venv/` and `__pycache__/`
+- A dependency file exists (`pyproject.toml`, `requirements.txt`,
+  `setup.py` or `setup.cfg`) — the one found is named in the output
+- A tests directory or test files exist — the number of test files
+  found is shown in the output
 
 Findings are heuristics — warnings worth a look, not security verdicts.
 
@@ -72,8 +81,8 @@ python -m pytest -q
 
 ## Limitations
 
-- Only the three basic checks above; no dependency-file, test-layout,
-  large-file, or syntax checks yet (planned).
+- Only the six checks above; no large-file or syntax checks yet
+  (planned).
 - No strict mode / non-zero exit on findings yet (planned).
 - No configuration file yet.
 - The scanner skips `.git`, `.venv`, `venv`, `__pycache__`, `.tox`,

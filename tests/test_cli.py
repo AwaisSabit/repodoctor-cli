@@ -42,7 +42,14 @@ def test_main_scans_directory_and_exits_zero(
     out = capsys.readouterr().out
     assert "Python files: 1" in out
     assert "README:       yes" in out
-    assert "Findings:     none" in out
+    # A README and a .py file only: gitignore, dependency file and
+    # tests are all missing, so those findings are reported.
+    assert "missing-gitignore" in out
+    assert "missing-dependency-file" in out
+    assert "missing-tests" in out
+    assert "Gitignore:    no" in out
+    assert "Dependency:   no" in out
+    assert "Test files:   0" in out
 
 
 def test_main_missing_target_exits_nonzero(
@@ -65,10 +72,17 @@ def test_main_json_output_is_valid_json(
     payload = json.loads(capsys.readouterr().out)
     assert payload["has_readme"] is True
     assert payload["total_files"] == 1
-    # A README-only folder has no .py files, so the info finding is correct.
+    # A README-only folder has no .py files, no .gitignore, no
+    # dependency file and no tests, so all four findings are correct.
     assert [finding["code"] for finding in payload["findings"]] == [
-        "no-python-files"
+        "no-python-files",
+        "missing-gitignore",
+        "missing-dependency-file",
+        "missing-tests",
     ]
+    assert payload["has_gitignore"] is False
+    assert payload["dependency_file"] is None
+    assert payload["test_files"] == 0
 
 
 def test_module_entry_point_help() -> None:

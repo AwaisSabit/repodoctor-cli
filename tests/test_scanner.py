@@ -34,7 +34,12 @@ def test_scanner_reports_missing_readme(tmp_path: Path) -> None:
 
     assert result.has_readme is False
     assert result.readme_path is None
-    assert [finding.code for finding in findings] == ["missing-readme"]
+    assert [finding.code for finding in findings] == [
+        "missing-readme",
+        "missing-gitignore",
+        "missing-dependency-file",
+        "missing-tests",
+    ]
 
 
 def test_scanner_empty_directory(tmp_path: Path) -> None:
