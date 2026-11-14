@@ -166,6 +166,54 @@ def check_generated_dirs(result: ScanResult) -> list[Finding]:
     return findings
 
 
+def check_syntax_errors(result: ScanResult) -> list[Finding]:
+    """Report each Python file that does not compile, as an error.
+
+    The scanner only compiles the source; it never runs it, so a
+    file with broken (or dangerous) code is still safe to scan.
+    The finding names the file and the line number of the error.
+    """
+    findings = []
+    for path, line, message in result.syntax_errors:
+        findings.append(
+            Finding(
+                code="syntax-error",
+                message=(
+                    f"File {path} has a Python syntax error on line "
+                    f"{line}: {message}."
+                ),
+                severity="error",
+                path=path,
+            )
+        )
+    return findings
+
+
+def check_todo_markers(result: ScanResult) -> list[Finding]:
+    """Report reminder markers in text files, as information only.
+
+    One informational finding per file, with the file and the number
+    of markers found. Markers are notes left for later work, not
+    problems, so they are never warnings or errors.
+    """
+    findings = []
+    for path, count in result.todo_markers:
+        word = "marker" if count == 1 else "markers"
+        findings.append(
+            Finding(
+                code="todo-markers",
+                message=(
+                    f"File {path} contains {count} reminder {word} "
+                    f"(TODO, FIXME, XXX or HACK). This is information "
+                    f"only, not a problem."
+                ),
+                severity="info",
+                path=path,
+            )
+        )
+    return findings
+
+
 #: The check set, in the order findings are reported.
 CHECKS = (
     check_empty,
@@ -176,6 +224,8 @@ CHECKS = (
     check_tests,
     check_large_files,
     check_generated_dirs,
+    check_syntax_errors,
+    check_todo_markers,
 )
 
 

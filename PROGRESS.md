@@ -178,3 +178,75 @@
 ### Next steps
 - Syntax checks, then strict mode (non-zero exit on findings),
   per the plan.
+
+## Day 4 — 2026-11-14 (Python syntax check and reminder-marker count)
+
+### Done
+- Added two new checks, keeping the scanner read-only (it only
+  reads files; it never writes, deletes or runs anything in the
+  scanned repo):
+  1. Python syntax check — the scanner compiles every `.py` file
+     it finds with `compile()` on the source text, which parses the
+     file without executing it, so broken or unsafe code is safe to
+     scan. A file with a `SyntaxError` is an error-level finding
+     naming the file and the line number. Files that compile clean
+     produce no finding. Files inside skipped directories (`.venv`,
+     `.git`, `__pycache__` and the rest) are never checked, since
+     the scanner never walks those. A file that cannot be read as
+     UTF-8 text is skipped instead of being reported.
+  2. Reminder-marker check — the scanner counts TODO, FIXME, XXX
+     and HACK markers in text files (`.py`, `.md`, `.txt`, `.rst`,
+     `.toml`, `.cfg`, `.ini`, `.json`, `.yaml`, `.yml`, `.js`,
+     `.ts`, `.sh`, `.html`, `.css`) and reports one informational
+     finding per file with the file and the count. Markers are
+     notes left for later work, not problems, so they are never
+     warnings or errors. A marker is one of those words followed
+     by a colon, the usual style for a note in code or docs.
+- Design note on the colon rule: matching the bare words would
+  make the tool flag its own source (its marker list, its finding
+  messages and its own docs all contain those words). Requiring
+  the colon keeps the tool's own scan clean — its own repository
+  still reports no findings — while catching the real convention.
+  The tool's own docs and tests are written so they contain no
+  literal marker text, for the same reason.
+- Wired the new facts into the scanner (`ScanResult` now carries
+  `syntax_errors` as (path, line, message) and `todo_markers` as
+  (path, count)), the checks (`checks.py`, ten checks in total),
+  and both reporters: the text summary shows Syntax errors and
+  TODO markers lines, and the JSON output carries `syntax_errors`
+  (path, line, message) and `todo_markers` (path, count).
+- Updated the README "What it checks" list, example output,
+  introduction and Limitations to describe the two new checks,
+  with no day numbers. The tool now has ten checks.
+
+### Tests / checks run (Day 4)
+- `.venv/bin/python -m pytest -q` → **57 passed in 0.30s**
+  (43 existing tests + 14 new tests in `tests/test_checks.py`:
+  a broken file reported as an error with file and line, the
+  line number named for a break on line 3, a clean file with no
+  finding, code that would write a file if run proving it is only
+  compiled (no file appears), two broken files each reported, a
+  broken file inside `.venv` never flagged, markers counted per
+  file across code and docs, a marker word with no colon not
+  counted, marker words inside a binary file not counted, all
+  four marker words counting, a clean folder with no marker
+  findings, a healthy folder still reporting no findings, and
+  text + JSON CLI output showing the new facts).
+- `.venv/bin/python -m repodoctor .` — exit 0; reported 21 files,
+  10 Python files, README yes, Gitignore yes (`.gitignore`),
+  Dependency `pyproject.toml`, Test files 3, Large files none,
+  Generated dirs `.pytest_cache`, `.venv`,
+  `src/repodoctor/__pycache__`, `tests/__pycache__`, Syntax
+  errors none, TODO markers none, no findings.
+- `.venv/bin/python -m repodoctor . --format json` — valid JSON,
+  same facts, `syntax_errors: []`, `todo_markers: []`,
+  `findings: []`.
+- `git diff --check` — clean. No secrets in the tree; `.venv/` is
+  ignored.
+
+### Commits
+- See `git log` for the hashes. Two commits, in plain English.
+- Not pushed — the parent pushes to GitHub later.
+
+### Next steps
+- Strict mode (non-zero exit on findings), per the plan.

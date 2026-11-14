@@ -35,6 +35,21 @@ def format_summary(result: ScanResult) -> str:
         if result.generated_dirs
         else "none"
     )
+    syntax_errors = (
+        ", ".join(
+            f"{path}: line {line}"
+            for path, line, _ in result.syntax_errors
+        )
+        if result.syntax_errors
+        else "none"
+    )
+    todo_markers = (
+        ", ".join(
+            f"{path} ({count})" for path, count in result.todo_markers
+        )
+        if result.todo_markers
+        else "none"
+    )
     lines = [
         f"RepoDoctor — {result.target}",
         f"  Files:        {result.total_files}",
@@ -45,6 +60,8 @@ def format_summary(result: ScanResult) -> str:
         f"  Test files:   {result.test_files}",
         f"  Large files:  {large_files}",
         f"  Generated dirs: {generated_dirs}",
+        f"  Syntax errors: {syntax_errors}",
+        f"  TODO markers: {todo_markers}",
     ]
     if result.findings:
         lines.append("  Findings:")
@@ -85,6 +102,18 @@ def format_json(result: ScanResult) -> str:
         ],
         "generated_dirs": [
             str(directory) for directory in result.generated_dirs
+        ],
+        "syntax_errors": [
+            {
+                "path": str(path),
+                "line": line,
+                "message": message,
+            }
+            for path, line, message in result.syntax_errors
+        ],
+        "todo_markers": [
+            {"path": str(path), "count": count}
+            for path, count in result.todo_markers
         ],
         "findings": [
             {

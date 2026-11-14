@@ -7,12 +7,13 @@ executes anything in the scanned repository — and reports basic project
 hygiene: how many files and Python files it found, whether a README,
 a `.gitignore`, a dependency file and tests exist, any files larger
 than 1 MB, any generated directories not covered by `.gitignore`,
-and any simple findings (for example, a missing README).
+any Python files that do not compile, any reminder markers left in
+text files, and any simple findings (for example, a missing README).
 
 > Built as part of a 30-day portfolio challenge, Nov–Dec 2026.
 > This is the working tool: package layout, CLI entry point,
-> read-only scanner, eight checks, text/JSON output, and pytest tests.
-> More checks (syntax checks, strict mode) are planned.
+> read-only scanner, ten checks, text/JSON output, and pytest tests.
+> More checks (strict mode) are planned.
 
 ## Problem
 
@@ -55,6 +56,8 @@ RepoDoctor — /home/awais/repodoctor-cli
   Test files:   3
   Large files:  none
   Generated dirs: .pytest_cache, .venv, src/repodoctor/__pycache__, tests/__pycache__
+  Syntax errors: none
+  TODO markers: none
   Findings:     none
 ```
 
@@ -79,6 +82,12 @@ does not exist.
   `.tox`, `.mypy_cache`, `.pytest_cache`, `dist`, `build`) are listed
   in `.gitignore` — a directory that exists but is not covered by
   `.gitignore` is flagged, so it is not committed by accident
+- Every Python file compiles — a file with a syntax error is
+  reported as an error with its file and line number. Files are
+  only compiled, never run, so broken or unsafe code is safe to scan
+- Reminder markers (TODO, FIXME, XXX and HACK) in text files are
+  counted per file and reported as information only, not as
+  problems. A marker is one of those words followed by a colon.
 
 Findings are heuristics — warnings worth a look, not security verdicts.
 
@@ -90,7 +99,7 @@ python -m pytest -q
 
 ## Limitations
 
-- Only the eight checks above; no syntax checks yet (planned).
+- Only the ten checks above.
 - No strict mode / non-zero exit on findings yet (planned).
 - No configuration file yet.
 - The scanner skips `.git`, `.venv`, `venv`, `__pycache__`, `.tox`,

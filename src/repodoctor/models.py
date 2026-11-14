@@ -60,6 +60,12 @@ class ScanResult:
     large_files: list[tuple[Path, int]] = field(default_factory=list)
     generated_dirs: list[Path] = field(default_factory=list)
     files: list[Path] = field(default_factory=list)
+    #: Python files that do not compile, as (path, line number, message).
+    #: The source is only compiled, never executed.
+    syntax_errors: list[tuple[Path, int, str]] = field(default_factory=list)
+    #: Reminder markers found in text files, as (path, marker count).
+    #: A marker is one of TODO, FIXME, XXX or HACK followed by a colon.
+    todo_markers: list[tuple[Path, int]] = field(default_factory=list)
     findings: list[Finding] = field(default_factory=list)
 
     @property

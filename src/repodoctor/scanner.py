@@ -4,12 +4,16 @@ The scanner never writes to, deletes, or executes anything inside the
 target. It walks the tree with :meth:`pathlib.Path.rglob`, skipping
 version-control and generated directories, and collects basic facts:
 how many files exist, how many are Python files, whether a README
-is present, which files are larger than 1 MB, and which generated
-or cache directories exist (even though their contents are skipped).
+is present, which files are larger than 1 MB, which generated
+or cache directories exist (even though their contents are skipped),
+which Python files do not compile, and how many reminder markers
+(TODO, FIXME, XXX or HACK, each followed by a colon) text files
+contain. Python files are only compiled, never executed.
 """
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from .models import ScanResult
@@ -95,6 +99,75 @@ def _gitignore_missing_exclusions(gitignore_path: Path) -> list[str]:
     return missing
 
 
+#: File name suffixes treated as text for the reminder-marker check.
+#: Other files (images, archives, compiled files and the like) are
+#: not scanned for markers.
+TEXT_FILE_SUFFIXES = frozenset(
+    {
+        ".py",
+        ".md",
+        ".txt",
+        ".rst",
+        ".toml",
+        ".cfg",
+        ".ini",
+        ".json",
+        ".yaml",
+        ".yml",
+        ".js",
+        ".ts",
+        ".sh",
+        ".html",
+        ".css",
+    }
+)
+
+#: Reminder-marker words. A marker is one of these words followed by
+#: a colon, the usual style for a note left in code or docs. The
+#: colon matters: the words on their own (for example in this
+#: module's own marker list, or in a sentence about markers) are
+#: not counted, so the tool does not flag its own source.
+TODO_MARKERS = ("TODO", "FIXME", "XXX", "HACK")
+
+#: Matches a reminder marker: one of the marker words, as a whole
+#: word, followed by a colon.
+TODO_MARKER_PATTERN = re.compile(r"\b(?:TODO|FIXME|XXX|HACK):")
+
+
+def _read_text(path: Path) -> str | None:
+    """Return ``path`` as text, or None when it cannot be read.
+
+    A file that cannot be read as UTF-8 text is skipped by the
+    syntax and marker checks instead of being reported: the tool
+    cannot judge what it cannot read. Reading is read-only.
+    """
+    try:
+        return path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+
+
+def _check_syntax(source: str, relative: Path, result: ScanResult) -> None:
+    """Compile ``source`` and record a syntax error, if there is one.
+
+    :func:`compile` only parses the source; it never runs it, so a
+    file with dangerous or broken code is still safe to scan.
+    """
+    try:
+        compile(source, str(relative), "exec")
+    except SyntaxError as exc:
+        result.syntax_errors.append(
+            (relative, exc.lineno or 1, exc.msg or str(exc))
+        )
+
+
+def _count_todo_markers(source: str, relative: Path, result: ScanResult) -> None:
+    """Count reminder markers in ``source`` and record them per file."""
+    count = len(TODO_MARKER_PATTERN.findall(source))
+    if count:
+        result.todo_markers.append((relative, count))
+
+
 def _is_skipped(path: Path) -> bool:
     """Return True if any part of ``path`` is a skipped directory."""
     return any(part in SKIPPED_DIRS for part in path.parts)
@@ -166,6 +239,14 @@ def scan_path(target: str | Path) -> ScanResult:
             result.gitignore_missing_exclusions = _gitignore_missing_exclusions(
                 path
             )
+        # Python files are compiled (never executed) and text files
+        # are scanned for reminder markers. Each file is read once.
+        if path.suffix in TEXT_FILE_SUFFIXES:
+            source = _read_text(path)
+            if source is not None:
+                if path.suffix == ".py":
+                    _check_syntax(source, relative, result)
+                _count_todo_markers(source, relative, result)
     # A dependency file is only looked for at the repository root, in
     # the preferred order above when more than one is present.
     for name in DEPENDENCY_FILES:

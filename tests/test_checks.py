@@ -10,7 +10,11 @@ import pytest
 
 from repodoctor.checks import run_checks
 from repodoctor.cli import main
-from repodoctor.scanner import LARGE_FILE_THRESHOLD_BYTES, scan_path
+from repodoctor.scanner import (
+    LARGE_FILE_THRESHOLD_BYTES,
+    TODO_MARKERS,
+    scan_path,
+)
 
 FULL_GITIGNORE = ".venv/\n__pycache__/\n"
 
@@ -437,3 +441,232 @@ def test_cli_json_output_shows_large_files_and_generated_dirs(
         "large-file",
         "generated-dir-not-ignored",
     ]
+
+
+# --- Syntax check ---
+
+
+def test_syntax_error_is_reported_as_error(tmp_path: Path) -> None:
+    """A Python file that does not compile is an error finding."""
+    (tmp_path / "bad.py").write_text("def broken(:\n", encoding="utf-8")
+
+    result = scan_path(tmp_path)
+    findings = run_checks(result)
+
+    assert result.syntax_errors == [(Path("bad.py"), 1, "invalid syntax")]
+    errors = [f for f in findings if f.code == "syntax-error"]
+    assert len(errors) == 1
+    assert errors[0].severity == "error"
+    assert errors[0].path == Path("bad.py")
+    assert "bad.py" in errors[0].message
+    assert "line 1" in errors[0].message
+    assert "invalid syntax" in errors[0].message
+
+
+def test_syntax_error_on_later_line_names_the_line(
+    tmp_path: Path,
+) -> None:
+    """The finding names the line where the syntax breaks."""
+    (tmp_path / "bad.py").write_text(
+        "x = 1\ny = 2\ndef broken(:\n", encoding="utf-8"
+    )
+
+    result = scan_path(tmp_path)
+    findings = run_checks(result)
+
+    assert result.syntax_errors == [(Path("bad.py"), 3, "invalid syntax")]
+    error = next(f for f in findings if f.code == "syntax-error")
+    assert "line 3" in error.message
+
+
+def test_clean_python_file_has_no_syntax_finding(tmp_path: Path) -> None:
+    """A file that compiles cleanly produces no syntax finding."""
+    (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
+
+    result = scan_path(tmp_path)
+
+    assert result.syntax_errors == []
+    assert "syntax-error" not in _codes(run_checks(result))
+
+
+def test_broken_code_is_compiled_not_executed(tmp_path: Path) -> None:
+    """Code that would write a file if run is only compiled."""
+    (tmp_path / "evil.py").write_text(
+        'open("pwned.txt", "w").write("x")\n', encoding="utf-8"
+    )
+
+    result = scan_path(tmp_path)
+    findings = run_checks(result)
+
+    assert result.syntax_errors == []
+    assert "syntax-error" not in _codes(findings)
+    assert not (tmp_path / "pwned.txt").exists()
+
+
+def test_multiple_syntax_errors_each_reported(tmp_path: Path) -> None:
+    """Two broken files produce two error findings, one per file."""
+    (tmp_path / "a.py").write_text("def broken(:\n", encoding="utf-8")
+    (tmp_path / "b.py").write_text("x = \n", encoding="utf-8")
+
+    result = scan_path(tmp_path)
+    findings = run_checks(result)
+
+    errors = [f for f in findings if f.code == "syntax-error"]
+    assert len(errors) == 2
+    assert [f.path for f in errors] == [Path("a.py"), Path("b.py")]
+    assert all(f.severity == "error" for f in errors)
+
+
+def test_syntax_error_inside_skipped_directory_is_not_flagged(
+    tmp_path: Path,
+) -> None:
+    """A broken file under .venv is never scanned and never flagged."""
+    (tmp_path / ".venv").mkdir()
+    (tmp_path / ".venv" / "bad.py").write_text(
+        "def broken(:\n", encoding="utf-8"
+    )
+    (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
+
+    result = scan_path(tmp_path)
+
+    assert result.python_files == 1
+    assert result.syntax_errors == []
+    assert "syntax-error" not in _codes(run_checks(result))
+
+
+# --- Reminder-marker check ---
+
+
+def _marker_text(*markers: str) -> str:
+    """Build text holding one marker per line, from marker words."""
+    return "".join(f"# {marker}: note here\n" for marker in markers)
+
+
+def test_todo_markers_counted_per_file(tmp_path: Path) -> None:
+    """Markers are counted per file: 3 in notes, 1 in app code."""
+    (tmp_path / "notes.md").write_text(
+        _marker_text(
+            TODO_MARKERS[0], TODO_MARKERS[0], TODO_MARKERS[1]
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "app.py").write_text(
+        _marker_text(TODO_MARKERS[3]) + "x = 1\n", encoding="utf-8"
+    )
+
+    result = scan_path(tmp_path)
+    findings = run_checks(result)
+
+    assert result.todo_markers == [
+        (Path("app.py"), 1),
+        (Path("notes.md"), 3),
+    ]
+    infos = [f for f in findings if f.code == "todo-markers"]
+    assert len(infos) == 2
+    assert all(f.severity == "info" for f in infos)
+    notes = next(f for f in infos if f.path == Path("notes.md"))
+    assert "notes.md" in notes.message
+    assert "3" in notes.message
+
+
+def test_todo_marker_without_colon_is_not_counted(tmp_path: Path) -> None:
+    """A marker word with no colon after it is not a marker."""
+    (tmp_path / "notes.md").write_text(
+        "TODO fix this without a colon\n", encoding="utf-8"
+    )
+
+    result = scan_path(tmp_path)
+
+    assert result.todo_markers == []
+    assert "todo-markers" not in _codes(run_checks(result))
+
+
+def test_todo_markers_in_non_text_file_not_counted(tmp_path: Path) -> None:
+    """Marker words inside a binary file are not counted."""
+    (tmp_path / "data.bin").write_bytes(
+        TODO_MARKERS[0].encode() + b": fix this\n"
+    )
+    (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
+
+    result = scan_path(tmp_path)
+
+    assert result.todo_markers == []
+    assert "todo-markers" not in _codes(run_checks(result))
+
+
+def test_all_four_marker_words_count(tmp_path: Path) -> None:
+    """Each of the four marker words counts when followed by a colon."""
+    (tmp_path / "notes.md").write_text(
+        _marker_text(*TODO_MARKERS), encoding="utf-8"
+    )
+
+    result = scan_path(tmp_path)
+
+    assert result.todo_markers == [(Path("notes.md"), 4)]
+
+
+def test_clean_folder_has_no_todo_findings(tmp_path: Path) -> None:
+    """A folder with no markers reports no marker findings."""
+    result = scan_path(_healthy_folder(tmp_path))
+
+    assert result.todo_markers == []
+    assert "todo-markers" not in _codes(run_checks(result))
+
+
+# --- Wiring: healthy folder and CLI output ---
+
+
+def test_healthy_folder_still_has_no_findings_with_new_checks(
+    tmp_path: Path,
+) -> None:
+    """A healthy folder has no syntax errors and no markers either."""
+    result = scan_path(_healthy_folder(tmp_path))
+
+    assert result.syntax_errors == []
+    assert result.todo_markers == []
+    assert run_checks(result) == []
+
+
+def test_cli_text_output_shows_syntax_errors_and_todo_markers(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Text output lists syntax errors (file and line) and markers."""
+    (tmp_path / "bad.py").write_text("def broken(:\n", encoding="utf-8")
+    (tmp_path / "notes.md").write_text(
+        _marker_text(TODO_MARKERS[0], TODO_MARKERS[0]), encoding="utf-8"
+    )
+
+    assert main([str(tmp_path)]) == 0
+
+    out = capsys.readouterr().out
+    assert "syntax-error" in out
+    assert "todo-markers" in out
+    assert "Syntax errors: bad.py: line 1" in out
+    assert "TODO markers: notes.md (2)" in out
+
+
+def test_cli_json_output_shows_syntax_errors_and_todo_markers(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """JSON output carries the syntax and marker facts."""
+    (tmp_path / "bad.py").write_text("def broken(:\n", encoding="utf-8")
+    (tmp_path / "notes.md").write_text(
+        _marker_text(TODO_MARKERS[0], TODO_MARKERS[1]), encoding="utf-8"
+    )
+
+    assert main([str(tmp_path), "--format", "json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["syntax_errors"] == [
+        {"path": "bad.py", "line": 1, "message": "invalid syntax"}
+    ]
+    assert payload["todo_markers"] == [{"path": "notes.md", "count": 2}]
+    codes = [f["code"] for f in payload["findings"]]
+    assert "syntax-error" in codes
+    assert "todo-markers" in codes
+    syntax = next(f for f in payload["findings"] if f["code"] == "syntax-error")
+    assert syntax["severity"] == "error"
+    assert syntax["path"] == "bad.py"
+    marker = next(f for f in payload["findings"] if f["code"] == "todo-markers")
+    assert marker["severity"] == "info"
+    assert marker["path"] == "notes.md"
