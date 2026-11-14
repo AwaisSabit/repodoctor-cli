@@ -14,6 +14,15 @@ from typing import Literal
 Severity = Literal["info", "warning", "error"]
 
 
+def human_size(size_bytes: int) -> str:
+    """Return a human-readable size, for example ``"1.2 MB"``."""
+    if size_bytes >= 1_048_576:
+        return f"{size_bytes / 1_048_576:.1f} MB"
+    if size_bytes >= 1024:
+        return f"{size_bytes / 1024:.1f} KB"
+    return f"{size_bytes} bytes"
+
+
 @dataclass(frozen=True)
 class Finding:
     """One observation about a scanned repository.
@@ -45,8 +54,11 @@ class ScanResult:
     has_gitignore: bool = False
     gitignore_path: Path | None = None
     gitignore_missing_exclusions: list[str] = field(default_factory=list)
+    gitignore_entries: set[str] = field(default_factory=set)
     dependency_file: Path | None = None
     test_files: int = 0
+    large_files: list[tuple[Path, int]] = field(default_factory=list)
+    generated_dirs: list[Path] = field(default_factory=list)
     files: list[Path] = field(default_factory=list)
     findings: list[Finding] = field(default_factory=list)
 

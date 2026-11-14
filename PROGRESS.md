@@ -110,3 +110,71 @@
 ### Next steps
 - Large-file and syntax checks, then strict mode (non-zero exit on
   findings), per the plan.
+
+## Day 3 — 2026-11-14 (large-file and generated-directory checks)
+
+### Done
+- Added two new checks, keeping the scanner read-only (it only
+  reads files; it never writes, deletes or runs anything in the
+  scanned repo):
+  1. Large-file check — the scanner records the size of each file
+     it finds and flags any file over 1 MB
+     (`LARGE_FILE_THRESHOLD_BYTES = 1_048_576` in `scanner.py`),
+     one warning per file with its relative path and a
+     human-readable size (for example, "1.0 MB"). Files inside
+     skipped directories (`.venv`, `.git`, `__pycache__` and the
+     rest) are never flagged, since the scanner never walks those.
+  2. Generated-directory check — the scanner records generated or
+     cache directories that exist even though their contents are
+     skipped (`__pycache__`, `.venv`, `venv`, `.tox`, `.mypy_cache`,
+     `.pytest_cache`, `dist`, `build`). Each one that exists and is
+     not covered by `.gitignore` is a warning suggesting it be
+     added to `.gitignore`; an entry counts with or without a
+     trailing slash, and it may name the directory or its full
+     relative path. With no `.gitignore` at all, every generated
+     directory found is a warning. A generated directory nested
+     inside another skipped directory (for example
+     `.venv/__pycache__`) is reported once, as the outer directory.
+- `dist` and `build` are now skipped directories too, so their
+  contents are not counted and large files inside them are never
+  flagged — the same treatment the other generated directories
+  already had.
+- Wired the new facts into the scanner (`ScanResult` now carries
+  `large_files`, `generated_dirs` and `gitignore_entries`), the
+  checks (`checks.py`, eight checks in total), and both reporters:
+  the text summary shows Large files and Generated dirs lines, and
+  the JSON output carries `large_files` (path, size in bytes,
+  human-readable size) and `generated_dirs`.
+- Updated the README "What it checks" list, example output and
+  Limitations to describe the two new checks, with no day numbers.
+  The tool now has eight checks.
+
+### Tests / checks run (Day 3)
+- `.venv/bin/python -m pytest -q` → **43 passed in 0.38s**
+  (31 existing tests + 12 new tests in `tests/test_checks.py`:
+  a file just over 1 MB flagged and one just under not flagged,
+  a large file inside `.venv` never flagged, a generated directory
+  listed in `.gitignore` passing while an unlisted one warns, no
+  `.gitignore` at all meaning generated directories are flagged,
+  entries without a trailing slash still counting, a nested
+  `__pycache__` covered by a name entry, a generated directory
+  inside a skipped directory not recorded twice, a healthy folder
+  still reporting no findings, and text + JSON CLI output showing
+  the new facts).
+- `.venv/bin/python -m repodoctor .` — exit 0; reported 21 files,
+  10 Python files, README yes, Gitignore yes (`.gitignore`),
+  Dependency `pyproject.toml`, Test files 3, Large files none,
+  Generated dirs `.pytest_cache`, `.venv`,
+  `src/repodoctor/__pycache__`, `tests/__pycache__`, no findings.
+- `.venv/bin/python -m repodoctor . --format json` — valid JSON,
+  same facts, `findings: []`.
+- `git diff --check` — clean. No secrets in the tree; `.venv/` is
+  ignored.
+
+### Commits
+- See `git log` for the hash. One commit, in plain English.
+- Not pushed — the parent pushes to GitHub later.
+
+### Next steps
+- Syntax checks, then strict mode (non-zero exit on findings),
+  per the plan.

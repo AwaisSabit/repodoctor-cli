@@ -5,13 +5,14 @@ A command-line repository health checker for Python projects.
 RepoDoctor scans a folder **read-only** — it never modifies, deletes, or
 executes anything in the scanned repository — and reports basic project
 hygiene: how many files and Python files it found, whether a README,
-a `.gitignore`, a dependency file and tests exist, and any simple
-findings (for example, a missing README).
+a `.gitignore`, a dependency file and tests exist, any files larger
+than 1 MB, any generated directories not covered by `.gitignore`,
+and any simple findings (for example, a missing README).
 
 > Built as part of a 30-day portfolio challenge, Nov–Dec 2026.
 > This is the working tool: package layout, CLI entry point,
-> read-only scanner, six checks, text/JSON output, and pytest tests.
-> More checks (large files, syntax checks, strict mode) are planned.
+> read-only scanner, eight checks, text/JSON output, and pytest tests.
+> More checks (syntax checks, strict mode) are planned.
 
 ## Problem
 
@@ -52,6 +53,8 @@ RepoDoctor — /home/awais/repodoctor-cli
   Gitignore:    yes (.gitignore)
   Dependency:   pyproject.toml
   Test files:   3
+  Large files:  none
+  Generated dirs: .pytest_cache, .venv, src/repodoctor/__pycache__, tests/__pycache__
   Findings:     none
 ```
 
@@ -70,6 +73,12 @@ does not exist.
   `setup.py` or `setup.cfg`) — the one found is named in the output
 - A tests directory or test files exist — the number of test files
   found is shown in the output
+- No file is larger than 1 MB — each file over the limit is listed
+  with its human-readable size (for example, "1.2 MB")
+- Generated or cache directories (`__pycache__`, `.venv`, `venv`,
+  `.tox`, `.mypy_cache`, `.pytest_cache`, `dist`, `build`) are listed
+  in `.gitignore` — a directory that exists but is not covered by
+  `.gitignore` is flagged, so it is not committed by accident
 
 Findings are heuristics — warnings worth a look, not security verdicts.
 
@@ -81,12 +90,13 @@ python -m pytest -q
 
 ## Limitations
 
-- Only the six checks above; no large-file or syntax checks yet
-  (planned).
+- Only the eight checks above; no syntax checks yet (planned).
 - No strict mode / non-zero exit on findings yet (planned).
 - No configuration file yet.
 - The scanner skips `.git`, `.venv`, `venv`, `__pycache__`, `.tox`,
-  and `.mypy_cache` directories when counting files.
+  `.mypy_cache`, `.pytest_cache`, `dist` and `build` directories when
+  counting files, so large files inside those directories are never
+  flagged; generated directories themselves are still reported.
 
 ## License
 

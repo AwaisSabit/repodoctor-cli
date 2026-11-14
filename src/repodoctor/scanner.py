@@ -3,8 +3,9 @@
 The scanner never writes to, deletes, or executes anything inside the
 target. It walks the tree with :meth:`pathlib.Path.rglob`, skipping
 version-control and generated directories, and collects basic facts:
-how many files exist, how many are Python files, and whether a README
-is present.
+how many files exist, how many are Python files, whether a README
+is present, which files are larger than 1 MB, and which generated
+or cache directories exist (even though their contents are skipped).
 """
 
 from __future__ import annotations
@@ -17,8 +18,38 @@ from .models import ScanResult
 #: Skipping them keeps counts meaningful and avoids scanning a virtual
 #: environment or a ``.git`` directory.
 SKIPPED_DIRS = frozenset(
-    {".git", ".venv", "venv", "__pycache__", ".pytest_cache", ".tox", ".mypy_cache"}
+    {
+        ".git",
+        ".venv",
+        "venv",
+        "__pycache__",
+        ".pytest_cache",
+        ".tox",
+        ".mypy_cache",
+        "dist",
+        "build",
+    }
 )
+
+#: Directories that are generated or cached. Their contents are
+#: skipped (see ``SKIPPED_DIRS``), but the scanner still records that
+#: the directory exists, so the checks can warn when it is not
+#: covered by ``.gitignore``.
+GENERATED_DIRS = frozenset(
+    {
+        "__pycache__",
+        ".venv",
+        "venv",
+        ".tox",
+        ".mypy_cache",
+        ".pytest_cache",
+        "dist",
+        "build",
+    }
+)
+
+#: Files larger than this are flagged by the large-file check.
+LARGE_FILE_THRESHOLD_BYTES = 1_048_576  # 1 MB
 
 #: File names accepted as a README (case-insensitive).
 README_NAMES = frozenset({"readme.md", "readme.rst", "readme.txt", "readme"})
@@ -37,21 +68,26 @@ DEPENDENCY_FILES = (
 REQUIRED_GITIGNORE_EXCLUSIONS = (".venv/", "__pycache__/")
 
 
-def _gitignore_missing_exclusions(gitignore_path: Path) -> list[str]:
-    """Return the required exclusions missing from ``gitignore_path``.
+def _gitignore_entries(gitignore_path: Path) -> set[str]:
+    """Return the entries of ``gitignore_path``, ignoring blanks and comments.
 
     Reading the file is a read-only operation; a file that cannot be
-    read as text is treated as if it had no exclusions at all.
+    read as text is treated as if it had no entries at all.
     """
     try:
         text = gitignore_path.read_text(encoding="utf-8", errors="ignore")
     except OSError:
-        return list(REQUIRED_GITIGNORE_EXCLUSIONS)
-    entries = {
+        return set()
+    return {
         line.strip()
         for line in text.splitlines()
         if line.strip() and not line.strip().startswith("#")
     }
+
+
+def _gitignore_missing_exclusions(gitignore_path: Path) -> list[str]:
+    """Return the required exclusions missing from ``gitignore_path``."""
+    entries = _gitignore_entries(gitignore_path)
     missing = []
     for exclusion in REQUIRED_GITIGNORE_EXCLUSIONS:
         if exclusion not in entries and exclusion.rstrip("/") not in entries:
@@ -82,13 +118,26 @@ def scan_path(target: str | Path) -> ScanResult:
 
     result = ScanResult(target=target_path.resolve())
     for path in sorted(target_path.rglob("*")):
-        if _is_skipped(path.relative_to(target_path)):
+        relative = path.relative_to(target_path)
+        if path.is_dir():
+            # A generated directory is recorded even though its
+            # contents are skipped. A generated directory nested
+            # inside another skipped directory (for example
+            # ``.venv/__pycache__``) is not recorded twice.
+            if path.name in GENERATED_DIRS and not _is_skipped(
+                relative.parent
+            ):
+                result.generated_dirs.append(relative)
+            continue
+        if _is_skipped(relative):
             continue
         if not path.is_file():
             continue
-        relative = path.relative_to(target_path)
         result.files.append(relative)
         result.total_files += 1
+        size = path.stat().st_size
+        if size > LARGE_FILE_THRESHOLD_BYTES:
+            result.large_files.append((relative, size))
         if path.suffix == ".py":
             result.python_files += 1
         # A test file is a .py file inside a tests/ or test/ folder, or
@@ -113,6 +162,7 @@ def scan_path(target: str | Path) -> ScanResult:
         if relative.parent == Path(".") and path.name == ".gitignore":
             result.has_gitignore = True
             result.gitignore_path = relative
+            result.gitignore_entries = _gitignore_entries(path)
             result.gitignore_missing_exclusions = _gitignore_missing_exclusions(
                 path
             )

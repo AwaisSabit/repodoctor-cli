@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 
-from .models import ScanResult
+from .models import ScanResult, human_size
 
 
 def format_summary(result: ScanResult) -> str:
@@ -22,6 +22,19 @@ def format_summary(result: ScanResult) -> str:
     dependency = (
         str(result.dependency_file) if result.dependency_file else "no"
     )
+    large_files = (
+        ", ".join(
+            f"{path} ({human_size(size)})"
+            for path, size in result.large_files
+        )
+        if result.large_files
+        else "none"
+    )
+    generated_dirs = (
+        ", ".join(str(directory) for directory in result.generated_dirs)
+        if result.generated_dirs
+        else "none"
+    )
     lines = [
         f"RepoDoctor — {result.target}",
         f"  Files:        {result.total_files}",
@@ -30,6 +43,8 @@ def format_summary(result: ScanResult) -> str:
         f"  Gitignore:    {gitignore}",
         f"  Dependency:   {dependency}",
         f"  Test files:   {result.test_files}",
+        f"  Large files:  {large_files}",
+        f"  Generated dirs: {generated_dirs}",
     ]
     if result.findings:
         lines.append("  Findings:")
@@ -60,6 +75,17 @@ def format_json(result: ScanResult) -> str:
         ),
         "test_files": result.test_files,
         "has_tests": result.has_tests,
+        "large_files": [
+            {
+                "path": str(path),
+                "size_bytes": size,
+                "size": human_size(size),
+            }
+            for path, size in result.large_files
+        ],
+        "generated_dirs": [
+            str(directory) for directory in result.generated_dirs
+        ],
         "findings": [
             {
                 "code": finding.code,

@@ -1,4 +1,5 @@
-"""Tests for the .gitignore, dependency-file and test-structure checks."""
+"""Tests for the .gitignore, dependency-file, test-structure, large-file
+and generated-directory checks."""
 
 from __future__ import annotations
 
@@ -9,7 +10,7 @@ import pytest
 
 from repodoctor.checks import run_checks
 from repodoctor.cli import main
-from repodoctor.scanner import scan_path
+from repodoctor.scanner import LARGE_FILE_THRESHOLD_BYTES, scan_path
 
 FULL_GITIGNORE = ".venv/\n__pycache__/\n"
 
@@ -225,3 +226,214 @@ def test_cli_json_output_shows_new_facts(
     assert payload["test_files"] == 1
     assert payload["has_tests"] is True
     assert payload["findings"] == []
+
+
+# --- Large-file check ---
+
+
+def test_large_file_just_over_threshold_is_flagged(tmp_path: Path) -> None:
+    """A file one byte over 1 MB is flagged, with its path and size."""
+    big = tmp_path / "big.bin"
+    big.write_bytes(b"x" * (LARGE_FILE_THRESHOLD_BYTES + 1))
+
+    result = scan_path(tmp_path)
+    findings = run_checks(result)
+
+    assert result.large_files == [(Path("big.bin"), LARGE_FILE_THRESHOLD_BYTES + 1)]
+    large = [f for f in findings if f.code == "large-file"]
+    assert len(large) == 1
+    assert large[0].severity == "warning"
+    assert large[0].path == Path("big.bin")
+    assert "big.bin" in large[0].message
+    assert "1.0 MB" in large[0].message
+
+
+def test_large_file_just_under_threshold_is_not_flagged(
+    tmp_path: Path,
+) -> None:
+    """A file one byte under 1 MB produces no large-file finding."""
+    (tmp_path / "almost.bin").write_bytes(
+        b"x" * (LARGE_FILE_THRESHOLD_BYTES - 1)
+    )
+
+    result = scan_path(tmp_path)
+
+    assert result.large_files == []
+    assert "large-file" not in _codes(run_checks(result))
+
+
+def test_large_file_inside_skipped_directory_is_not_flagged(
+    tmp_path: Path,
+) -> None:
+    """A large file under .venv is never counted and never flagged."""
+    (tmp_path / ".venv").mkdir()
+    (tmp_path / ".venv" / "huge.bin").write_bytes(
+        b"x" * (LARGE_FILE_THRESHOLD_BYTES + 1)
+    )
+    (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
+
+    result = scan_path(tmp_path)
+
+    assert result.total_files == 1
+    assert result.large_files == []
+    assert "large-file" not in _codes(run_checks(result))
+
+
+# --- Generated-directory check ---
+
+
+def test_generated_dir_listed_in_gitignore_passes(tmp_path: Path) -> None:
+    """A dist/ folder listed in .gitignore produces no finding."""
+    (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
+    (tmp_path / ".gitignore").write_text(
+        FULL_GITIGNORE + "dist/\n", encoding="utf-8"
+    )
+    (tmp_path / "dist").mkdir()
+    (tmp_path / "dist" / "app-0.1.0.tar.gz").write_text(
+        "archive\n", encoding="utf-8"
+    )
+
+    result = scan_path(tmp_path)
+    findings = run_checks(result)
+
+    assert result.generated_dirs == [Path("dist")]
+    assert result.total_files == 2  # dist contents are skipped
+    assert "generated-dir-not-ignored" not in _codes(findings)
+
+
+def test_generated_dir_not_listed_in_gitignore_warns(tmp_path: Path) -> None:
+    """A build/ folder missing from .gitignore is flagged by name."""
+    (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
+    (tmp_path / ".gitignore").write_text(FULL_GITIGNORE, encoding="utf-8")
+    (tmp_path / "build").mkdir()
+    (tmp_path / "build" / "out.txt").write_text("built\n", encoding="utf-8")
+
+    result = scan_path(tmp_path)
+    findings = run_checks(result)
+
+    generated = [f for f in findings if f.code == "generated-dir-not-ignored"]
+    assert len(generated) == 1
+    assert generated[0].severity == "warning"
+    assert generated[0].path == Path("build")
+    assert "build" in generated[0].message
+    assert ".gitignore" in generated[0].message
+
+
+def test_generated_dir_flagged_when_no_gitignore(tmp_path: Path) -> None:
+    """With no .gitignore at all, every generated directory is flagged."""
+    (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
+    (tmp_path / "__pycache__").mkdir()
+    (tmp_path / "__pycache__" / "app.cpython-312.pyc").write_bytes(b"\x00")
+
+    result = scan_path(tmp_path)
+    findings = run_checks(result)
+
+    generated = [f for f in findings if f.code == "generated-dir-not-ignored"]
+    assert len(generated) == 1
+    assert generated[0].path == Path("__pycache__")
+    assert "no .gitignore" in generated[0].message
+
+
+def test_generated_dir_entry_without_slash_still_counts(tmp_path: Path) -> None:
+    """An entry written as `dist` (no slash) still covers dist/."""
+    (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
+    (tmp_path / ".gitignore").write_text(
+        FULL_GITIGNORE + "dist\n", encoding="utf-8"
+    )
+    (tmp_path / "dist").mkdir()
+
+    result = scan_path(tmp_path)
+
+    assert result.generated_dirs == [Path("dist")]
+    assert "generated-dir-not-ignored" not in _codes(run_checks(result))
+
+
+def test_nested_generated_dir_covered_by_name_entry(tmp_path: Path) -> None:
+    """A nested __pycache__ is covered by a `__pycache__/` entry."""
+    (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
+    (tmp_path / ".gitignore").write_text(FULL_GITIGNORE, encoding="utf-8")
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "__pycache__").mkdir()
+    (tmp_path / "src" / "__pycache__" / "app.pyc").write_bytes(b"\x00")
+
+    result = scan_path(tmp_path)
+
+    assert result.generated_dirs == [Path("src/__pycache__")]
+    assert "generated-dir-not-ignored" not in _codes(run_checks(result))
+
+
+def test_generated_dir_inside_skipped_dir_not_recorded_twice(
+    tmp_path: Path,
+) -> None:
+    """``.venv/__pycache__`` is not recorded apart from ``.venv``."""
+    (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
+    (tmp_path / ".gitignore").write_text(FULL_GITIGNORE, encoding="utf-8")
+    (tmp_path / ".venv").mkdir()
+    (tmp_path / ".venv" / "__pycache__").mkdir()
+    (tmp_path / ".venv" / "__pycache__" / "lib.pyc").write_bytes(b"\x00")
+
+    result = scan_path(tmp_path)
+
+    assert result.generated_dirs == [Path(".venv")]
+
+
+# --- Wiring: healthy folder and CLI output ---
+
+
+def test_healthy_folder_still_has_no_findings(tmp_path: Path) -> None:
+    """A healthy folder has no large files and no generated dirs."""
+    result = scan_path(_healthy_folder(tmp_path))
+
+    assert result.large_files == []
+    assert result.generated_dirs == []
+    assert run_checks(result) == []
+
+
+def test_cli_text_output_shows_large_files_and_generated_dirs(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Text output lists large files (with size) and generated dirs."""
+    (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
+    (tmp_path / "big.bin").write_bytes(
+        b"x" * (LARGE_FILE_THRESHOLD_BYTES + 1)
+    )
+    (tmp_path / "dist").mkdir()
+
+    assert main([str(tmp_path)]) == 0
+
+    out = capsys.readouterr().out
+    assert "large-file" in out
+    assert "generated-dir-not-ignored" in out
+    assert "Large files:  big.bin (1.0 MB)" in out
+    assert "Generated dirs: dist" in out
+
+
+def test_cli_json_output_shows_large_files_and_generated_dirs(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """JSON output carries the large-file and generated-dir facts."""
+    (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
+    (tmp_path / "big.bin").write_bytes(
+        b"x" * (LARGE_FILE_THRESHOLD_BYTES + 1)
+    )
+    (tmp_path / "dist").mkdir()
+
+    assert main([str(tmp_path), "--format", "json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["large_files"] == [
+        {
+            "path": "big.bin",
+            "size_bytes": LARGE_FILE_THRESHOLD_BYTES + 1,
+            "size": "1.0 MB",
+        }
+    ]
+    assert payload["generated_dirs"] == ["dist"]
+    assert [f["code"] for f in payload["findings"]] == [
+        "missing-readme",
+        "missing-gitignore",
+        "missing-dependency-file",
+        "missing-tests",
+        "large-file",
+        "generated-dir-not-ignored",
+    ]
