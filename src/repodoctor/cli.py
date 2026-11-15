@@ -3,6 +3,7 @@
 Usage:
     repodoctor .
     repodoctor ./my-project --format json
+    repodoctor ./my-project --no-color
     repodoctor --help
     repodoctor --version
 
@@ -10,7 +11,9 @@ The CLI is deliberately built on :mod:`argparse` only (no third-party
 CLI framework on Day 1). It scans the target read-only, runs the basic
 checks, prints a summary, and exits 0 on a successful scan — even when
 findings are warnings. A non-zero exit means the scan itself failed
-(for example, the target does not exist).
+(for example, the target does not exist). Severity labels in the text
+report are coloured only when the output goes to a terminal; use
+``--no-color`` to turn that off.
 """
 
 from __future__ import annotations
@@ -44,6 +47,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Output format: human-readable text (default) or JSON for CI.",
     )
     parser.add_argument(
+        "--no-color",
+        action="store_true",
+        help="Do not colour severity labels in the text report, even "
+        "when the output goes to a terminal.",
+    )
+    parser.add_argument(
         "--version",
         action="version",
         version=f"%(prog)s {__version__}",
@@ -67,7 +76,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.format == "json":
         print(format_json(result))
     else:
-        print(format_summary(result))
+        # Colour severity labels only when the output goes to a
+        # terminal; piped or redirected output stays plain text.
+        use_color = sys.stdout.isatty() and not args.no_color
+        print(format_summary(result, use_color=use_color))
     return 0
 
 

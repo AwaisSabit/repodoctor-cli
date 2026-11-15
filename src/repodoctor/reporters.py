@@ -9,11 +9,69 @@ from __future__ import annotations
 
 import json
 
-from .models import ScanResult, human_size
+from .models import Finding, ScanResult, human_size
+
+#: Severities in the order findings are reported: errors first, then
+#: warnings, then informational notes.
+SEVERITY_ORDER = ("error", "warning", "info")
+
+#: Heading shown for each severity group in the text report.
+SEVERITY_HEADINGS = {
+    "error": "Errors",
+    "warning": "Warnings",
+    "info": "Notes",
+}
+
+#: Singular and plural words used in the summary count line.
+SEVERITY_COUNT_WORDS = {
+    "error": ("error", "errors"),
+    "warning": ("warning", "warnings"),
+    "info": ("note", "notes"),
+}
+
+#: ANSI colour codes for severity labels, used only when the output
+#: goes to a terminal (never when piped) and --no-color was not given.
+SEVERITY_COLOURS = {"error": "31", "warning": "33", "info": "36"}
 
 
-def format_summary(result: ScanResult) -> str:
-    """Return a short human-readable summary of a scan."""
+def _count_phrase(count: int, singular: str, plural: str) -> str:
+    """Return a count with the right singular/plural word."""
+    return f"{count} {singular if count == 1 else plural}"
+
+
+def _summary_line(counts: dict[str, int]) -> str:
+    """Return the closing summary line, for example ``"Found 2 errors,
+    1 warning and 3 notes."`` Severities with no findings are left
+    out; with no findings at all the line says so plainly."""
+    parts = []
+    for severity in SEVERITY_ORDER:
+        count = counts.get(severity, 0)
+        if count:
+            singular, plural = SEVERITY_COUNT_WORDS[severity]
+            parts.append(_count_phrase(count, singular, plural))
+    if not parts:
+        return "Found no findings."
+    if len(parts) == 1:
+        return f"Found {parts[0]}."
+    return f"Found {', '.join(parts[:-1])} and {parts[-1]}."
+
+
+def _severity_label(severity: str, use_color: bool) -> str:
+    """Return the ``[severity]`` label, coloured when asked for."""
+    label = f"[{severity}]"
+    if use_color:
+        return f"\x1b[{SEVERITY_COLOURS[severity]}m{label}\x1b[0m"
+    return label
+
+
+def format_summary(result: ScanResult, use_color: bool = False) -> str:
+    """Return a short human-readable summary of a scan.
+
+    Findings are grouped by severity — errors first, then warnings,
+    then informational notes — each group under its own heading, with
+    a summary count line at the end. When there are no findings the
+    report keeps its friendly ``Findings: none`` message.
+    """
     gitignore = (
         f"yes ({result.gitignore_path})"
         if result.has_gitignore
@@ -65,10 +123,26 @@ def format_summary(result: ScanResult) -> str:
     ]
     if result.findings:
         lines.append("  Findings:")
-        for finding in result.findings:
-            lines.append(f"    [{finding.severity}] {finding.code}: {finding.message}")
+        counts: dict[str, int] = {}
+        for severity in SEVERITY_ORDER:
+            group = [
+                finding
+                for finding in result.findings
+                if finding.severity == severity
+            ]
+            if not group:
+                continue
+            counts[severity] = len(group)
+            lines.append(f"    {SEVERITY_HEADINGS[severity]} ({len(group)})")
+            for finding in group:
+                label = _severity_label(finding.severity, use_color)
+                lines.append(
+                    f"      {label} {finding.code}: {finding.message}"
+                )
+        lines.append(f"  {_summary_line(counts)}")
     else:
         lines.append("  Findings:     none")
+        lines.append(f"  {_summary_line({})}")
     return "\n".join(lines)
 
 

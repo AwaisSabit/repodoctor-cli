@@ -250,3 +250,73 @@
 
 ### Next steps
 - Strict mode (non-zero exit on findings), per the plan.
+
+## Day 5 — 2026-11-15 (text reporter grouped by severity)
+
+### Done
+- Reworked the text reporter (`reporters.py`) so findings are grouped
+  by severity — errors first, then warnings, then informational notes
+  — each group under its own heading with its count, for example
+  "Errors (2)", "Warnings (1)", "Notes (3)". Each finding stays on
+  its own line with its severity label and its plain-English message,
+  and groups with no findings are left out. The summary facts section
+  (files, README, gitignore, and the rest) still comes first, above
+  the findings.
+- Added a summary line at the end of the text output with the counts
+  per severity, with correct singular/plural wording, for example
+  "Found 2 errors, 1 warning and 3 notes." Severities with no
+  findings are left out of the line. With no findings at all the
+  report keeps its friendly "Findings: none" message and ends with
+  "Found no findings."
+- Colour, kept simple and safe: when the text output goes to a
+  terminal, the severity labels are coloured (red for errors, yellow
+  for warnings, cyan for notes); piped or redirected output is never
+  coloured. A new `--no-color` flag turns the colour off. Headings
+  and messages are never coloured.
+- The JSON reporter is unchanged in structure: it already carries a
+  severity per finding, and both reporters read the same findings,
+  so the severities in the two formats always agree.
+- Exit codes are unchanged: a scan with findings still exits 0 in
+  non-strict mode (strict mode is planned for a later day).
+- Updated the README with a grouped-output example, the colour and
+  `--no-color` notes, and a short paragraph on how the two formats
+  agree on severities. No day numbers in the README, as always.
+
+### Tests / checks run (Day 5)
+- `.venv/bin/python -m pytest -q` → **72 passed in 0.36s**
+  (57 existing tests + 15 new tests in `tests/test_reporters.py`:
+  findings grouped errors-then-warnings-then-notes whatever order
+  they arrive in, each finding under its own group heading; the
+  summary line counts right for a mixed set; singular/plural wording
+  for one and several findings of each severity; zero findings
+  keeping the "Findings: none" message with no group headings; a
+  severity with no findings getting no heading; the facts section
+  staying above the findings; the JSON output carrying the same
+  findings with the same severities; colour appearing only when
+  asked for and only on the severity label; CLI text output on a
+  temp folder with findings showing all three groups and the
+  summary line, still exiting 0; and the `--no-color` flag being
+  accepted).
+- `.venv/bin/python -m repodoctor .` — exit 0; reported 21 files,
+  10 Python files, README yes, Gitignore yes (`.gitignore`),
+  Dependency `pyproject.toml`, Test files 3, Large files none,
+  Generated dirs `.pytest_cache`, `.venv`,
+  `src/repodoctor/__pycache__`, `tests/__pycache__`, Syntax
+  errors none, TODO markers none, "Findings: none",
+  "Found no findings."
+- A temp folder with a broken Python file, a missing README,
+  `.gitignore`, dependency file and tests, and a file with a
+  reminder marker showed the grouped output: "Errors (1)",
+  "Warnings (4)", "Notes (1)", ending with
+  "Found 1 error, 4 warnings and 1 note." — exit 0.
+- `git diff --check` — clean. No secrets in the tree; `.venv/` is
+  ignored. The new test file contains no literal reminder-marker
+  text, so the tool still reports no findings on its own repository.
+
+### Commits
+- See `git log` for the hashes. Three commits, in plain English.
+- Not pushed — the parent pushes to GitHub later.
+
+### Next steps
+- JSON reporter work, then strict mode (non-zero exit on findings),
+  per the plan.
