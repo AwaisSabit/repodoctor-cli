@@ -100,6 +100,95 @@ Exit codes: `0` means the scan completed (even if findings are
 warnings); `2` means the scan itself failed, for example the target
 does not exist.
 
+## JSON output
+
+`repodoctor ./my-project --format json` prints the same scan as a
+JSON document, for use in scripts and CI. The top-level fields are:
+
+- `tool` — always `"repodoctor"`.
+- `schema_version` — the version of this JSON format, starting at 1.
+  It changes only when a field is added, removed or renamed, so a
+  script can check it before reading the rest.
+- `tool_version` — the RepoDoctor version that produced the report.
+- `target` — the folder that was scanned.
+- `total_files` and `python_files` — how many files were found, and
+  how many of them are Python files. `has_python_files` says
+  whether any Python files were found at all.
+- `files` — the list of files found, as paths relative to the target.
+- `has_readme` and `readme_path` — whether a README exists at the
+  repository root, and its path when it does.
+- `has_gitignore`, `gitignore_path`, `gitignore_entries` and
+  `gitignore_missing_exclusions` — whether a `.gitignore` exists at
+  the root, its path, the entries it contains, and the common Python
+  exclusions (`.venv/`, `__pycache__/`) it is missing.
+- `dependency_file` — the dependency file found
+  (`pyproject.toml`, `requirements.txt`, `setup.py` or `setup.cfg`),
+  or nothing when there is none.
+- `test_files` and `has_tests` — how many test files were found, and
+  whether there are any.
+- `large_files` — each file over 1 MB, with its path, its size in
+  bytes and a human-readable size.
+- `generated_dirs` — generated or cache directories that exist
+  (`.venv`, `__pycache__` and the rest).
+- `syntax_errors` — Python files that do not compile, with the file,
+  the line number and the error message.
+- `todo_markers` — files containing reminder markers, with the file
+  and how many markers it has.
+- `findings` — the same findings as the text report, in the same
+  order, each with a stable `code`, a plain-English `message`, a
+  `severity` (`"error"`, `"warning"` or `"info"`) and a `path` when
+  the finding is about one file.
+- `summary` — the finding counts: `total` findings, plus `errors`,
+  `warnings` and `notes` (informational findings). These numbers
+  match the closing summary line of the text report, so the two
+  formats always agree.
+
+Short example (a folder with two files, a missing README, no
+`.gitignore`, no dependency file and no tests):
+
+```json
+{
+  "tool": "repodoctor",
+  "schema_version": 1,
+  "tool_version": "0.1.0",
+  "target": "/home/awais/my-project",
+  "total_files": 2,
+  "python_files": 1,
+  "has_python_files": true,
+  "files": ["app.py", "notes.txt"],
+  "has_readme": false,
+  "readme_path": null,
+  "has_gitignore": false,
+  "gitignore_path": null,
+  "gitignore_entries": [],
+  "gitignore_missing_exclusions": [],
+  "dependency_file": null,
+  "test_files": 0,
+  "has_tests": false,
+  "large_files": [],
+  "generated_dirs": [],
+  "syntax_errors": [],
+  "todo_markers": [],
+  "findings": [
+    {
+      "code": "missing-readme",
+      "message": "No README file found. Add a README.md describing what this project does.",
+      "severity": "warning",
+      "path": null
+    }
+  ],
+  "summary": {
+    "total": 4,
+    "errors": 0,
+    "warnings": 4,
+    "notes": 0
+  }
+}
+```
+
+(The example above shows only the first finding; the full output
+lists all four warnings.)
+
 ## What it checks
 
 - README exists

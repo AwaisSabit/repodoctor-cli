@@ -9,7 +9,12 @@ from __future__ import annotations
 
 import json
 
+from . import __version__
 from .models import Finding, ScanResult, human_size
+
+#: Version of the JSON report format. Bump it when a field is added,
+#: removed or renamed, so CI consumers can tell formats apart.
+JSON_SCHEMA_VERSION = 1
 
 #: Severities in the order findings are reported: errors first, then
 #: warnings, then informational notes.
@@ -146,18 +151,53 @@ def format_summary(result: ScanResult, use_color: bool = False) -> str:
     return "\n".join(lines)
 
 
+def summary_counts(result: ScanResult) -> dict[str, int]:
+    """Return the finding counts, by severity, for a scan result.
+
+    The keys are ``"total"``, ``"errors"``, ``"warnings"`` and
+    ``"notes"`` (informational findings are called notes, as in the
+    text summary line). The numbers here match the text report's
+    closing summary line, so both formats always agree.
+    """
+    counts = {"total": 0, "errors": 0, "warnings": 0, "notes": 0}
+    for finding in result.findings:
+        counts["total"] += 1
+        if finding.severity == "error":
+            counts["errors"] += 1
+        elif finding.severity == "warning":
+            counts["warnings"] += 1
+        else:
+            counts["notes"] += 1
+    return counts
+
+
 def format_json(result: ScanResult) -> str:
-    """Return the scan result as a JSON document (for CI use)."""
+    """Return the scan result as a JSON document (for CI use).
+
+    The document carries every fact the scanner collected — the file
+    list, README, gitignore, dependency file, test files, large
+    files, generated directories, syntax errors and reminder markers
+    — plus the findings and a ``"summary"`` object with the total
+    finding count and the counts per severity. ``"schema_version"``
+    marks the format (currently 1) and ``"tool_version"`` is the
+    RepoDoctor version that produced the report.
+    """
     payload = {
+        "tool": "repodoctor",
+        "schema_version": JSON_SCHEMA_VERSION,
+        "tool_version": __version__,
         "target": str(result.target),
         "total_files": result.total_files,
         "python_files": result.python_files,
+        "has_python_files": result.has_python_files,
+        "files": [str(path) for path in result.files],
         "has_readme": result.has_readme,
         "readme_path": str(result.readme_path) if result.readme_path else None,
         "has_gitignore": result.has_gitignore,
         "gitignore_path": (
             str(result.gitignore_path) if result.gitignore_path else None
         ),
+        "gitignore_entries": sorted(result.gitignore_entries),
         "gitignore_missing_exclusions": list(
             result.gitignore_missing_exclusions
         ),
@@ -198,5 +238,6 @@ def format_json(result: ScanResult) -> str:
             }
             for finding in result.findings
         ],
+        "summary": summary_counts(result),
     }
     return json.dumps(payload, indent=2)

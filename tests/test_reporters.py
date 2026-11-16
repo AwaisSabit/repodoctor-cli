@@ -12,9 +12,15 @@ from pathlib import Path
 
 import pytest
 
+from repodoctor import __version__
 from repodoctor.cli import main
 from repodoctor.models import Finding, ScanResult
-from repodoctor.reporters import format_json, format_summary
+from repodoctor.reporters import (
+    JSON_SCHEMA_VERSION,
+    format_json,
+    format_summary,
+    summary_counts,
+)
 
 
 def _result(*findings: Finding) -> ScanResult:
@@ -233,3 +239,139 @@ def test_cli_no_color_flag_is_accepted(
 
     assert main([str(tmp_path), "--no-color"]) == 0
     assert "\x1b[" not in capsys.readouterr().out
+
+
+def test_json_carries_schema_and_tool_version() -> None:
+    """The JSON report names the tool, the format version and the
+    tool version, so consumers can tell formats apart later."""
+    payload = json.loads(format_json(_result()))
+    assert payload["tool"] == "repodoctor"
+    assert payload["schema_version"] == 1
+    assert payload["schema_version"] == JSON_SCHEMA_VERSION
+    assert payload["tool_version"] == __version__
+
+
+def test_json_summary_counts_match_text_summary() -> None:
+    """The JSON summary object counts the total and each severity,
+    and its numbers agree with the text summary line."""
+    result = _result(
+        _error(),
+        _error("syntax-error-2"),
+        _warning(),
+        _note(),
+        _note("todo-markers-2"),
+        _note("todo-markers-3"),
+    )
+    payload = json.loads(format_json(result))
+    assert payload["summary"] == {
+        "total": 6,
+        "errors": 2,
+        "warnings": 1,
+        "notes": 3,
+    }
+    assert summary_counts(result) == payload["summary"]
+    assert "Found 2 errors, 1 warning and 3 notes." in format_summary(result)
+
+
+def test_json_summary_is_zero_when_no_findings() -> None:
+    """With no findings the JSON summary is all zeros."""
+    payload = json.loads(format_json(_result()))
+    assert payload["summary"] == {
+        "total": 0,
+        "errors": 0,
+        "warnings": 0,
+        "notes": 0,
+    }
+    assert "Found no findings." in format_summary(_result())
+
+
+def test_json_carries_every_scan_fact() -> None:
+    """Every fact the scanner collects appears in the JSON output,
+    in a consistent shape, including facts the text report shows
+    only as counts."""
+    result = ScanResult(target=Path("example"))
+    result.total_files = 4
+    result.python_files = 2
+    result.files = [
+        Path("README.md"),
+        Path("app.py"),
+        Path("tests/test_app.py"),
+        Path(".gitignore"),
+    ]
+    result.has_readme = True
+    result.readme_path = Path("README.md")
+    result.has_gitignore = True
+    result.gitignore_path = Path(".gitignore")
+    result.gitignore_entries = {"__pycache__/", ".venv/"}
+    result.gitignore_missing_exclusions = []
+    result.dependency_file = Path("pyproject.toml")
+    result.test_files = 1
+    result.large_files = [(Path("data.bin"), 2_000_000)]
+    result.generated_dirs = [Path("__pycache__")]
+    result.syntax_errors = [
+        (Path("broken.py"), 3, "invalid syntax"),
+    ]
+    result.todo_markers = [(Path("notes.txt"), 2)]
+    result.findings = [_error(), _warning()]
+
+    payload = json.loads(format_json(result))
+    assert payload["total_files"] == 4
+    assert payload["python_files"] == 2
+    assert payload["has_python_files"] is True
+    assert payload["files"] == [
+        "README.md",
+        "app.py",
+        "tests/test_app.py",
+        ".gitignore",
+    ]
+    assert payload["has_readme"] is True
+    assert payload["readme_path"] == "README.md"
+    assert payload["has_gitignore"] is True
+    assert payload["gitignore_path"] == ".gitignore"
+    assert payload["gitignore_entries"] == [".venv/", "__pycache__/"]
+    assert payload["gitignore_missing_exclusions"] == []
+    assert payload["dependency_file"] == "pyproject.toml"
+    assert payload["test_files"] == 1
+    assert payload["has_tests"] is True
+    assert payload["large_files"] == [
+        {"path": "data.bin", "size_bytes": 2_000_000, "size": "1.9 MB"}
+    ]
+    assert payload["generated_dirs"] == ["__pycache__"]
+    assert payload["syntax_errors"] == [
+        {"path": "broken.py", "line": 3, "message": "invalid syntax"}
+    ]
+    assert payload["todo_markers"] == [{"path": "notes.txt", "count": 2}]
+    assert payload["summary"] == {
+        "total": 2,
+        "errors": 1,
+        "warnings": 1,
+        "notes": 0,
+    }
+
+
+def test_cli_json_output_has_summary_and_version(
+    tmp_path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The CLI JSON output on a real folder is valid JSON with the
+    version fields and a summary that agrees with the text output."""
+    (tmp_path / "broken.py").write_text("x = \n", encoding="utf-8")
+    (tmp_path / "notes.txt").write_text(_marker_note(), encoding="utf-8")
+
+    assert main([str(tmp_path), "--format", "json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["schema_version"] == 1
+    assert payload["tool_version"] == __version__
+    assert payload["summary"] == {
+        "total": 6,
+        "errors": 1,
+        "warnings": 4,
+        "notes": 1,
+    }
+    assert payload["total_files"] == 2
+    assert payload["files"] == ["broken.py", "notes.txt"]
+    assert payload["syntax_errors"][0]["path"] == "broken.py"
+    assert payload["todo_markers"] == [{"path": "notes.txt", "count": 1}]
+
+    # The same folder in text form ends with the same counts.
+    assert main([str(tmp_path)]) == 0
+    assert "Found 1 error, 4 warnings and 1 note." in capsys.readouterr().out

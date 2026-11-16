@@ -320,3 +320,65 @@
 ### Next steps
 - JSON reporter work, then strict mode (non-zero exit on findings),
   per the plan.
+
+## Day 6 — 2026-11-16 (JSON reporter: version, summary, every scan fact)
+
+### Done
+- Versioned the JSON report so consumers can tell formats apart:
+  the output now starts with `"tool": "repodoctor"`,
+  `"schema_version": 1` (a new `JSON_SCHEMA_VERSION` constant in
+  `reporters.py`, to bump only when a field is added, removed or
+  renamed) and `"tool_version"` carrying the RepoDoctor version
+  from `__init__.py` (currently `0.1.0`).
+- Added a `"summary"` object to the JSON output with the total
+  finding count and the counts per severity — `total`, `errors`,
+  `warnings` and `notes` (informational findings are called notes,
+  as in the text report). A new `summary_counts()` helper builds
+  it, and its numbers match the text report's closing summary line
+  ("Found 2 errors, 1 warning and 3 notes."), so both formats
+  always agree. With no findings the summary is all zeros.
+- Audited every `ScanResult` fact against the JSON output and fixed
+  the gaps: the JSON now also carries the full `files` list (paths
+  relative to the target), the `gitignore_entries` (sorted, so the
+  output is stable) and `has_python_files`, alongside the facts it
+  already had — target, file counts, README, gitignore path and
+  missing exclusions, dependency file, test files, large files,
+  generated directories, syntax errors, reminder markers and
+  findings. Nothing in the JSON disagrees with the text output.
+- Documented the JSON format in the README: a new "JSON output"
+  section lists every top-level field and the summary object in
+  plain words, with a short example taken from a real scan. No day
+  numbers in the README, as always.
+- Exit codes are unchanged: a scan with findings still exits 0 in
+  non-strict mode (strict mode is planned for a later day).
+
+### Tests / checks run (Day 6)
+- `.venv/bin/python -m pytest -q` → **77 passed in 0.39s**
+  (72 existing tests + 5 new tests in `tests/test_reporters.py`:
+  the schema and tool version fields; the summary object counts
+  for a mixed set and all zeros with no findings, matching the
+  text summary line; every scan fact present in the JSON output in
+  a consistent shape; and the CLI JSON output on a real folder
+  with findings, its summary agreeing with the text output on the
+  same folder).
+- `.venv/bin/python -m repodoctor .` — exit 0; reported 22 files,
+  11 Python files, README yes, Gitignore yes (`.gitignore`),
+  Dependency `pyproject.toml`, Test files 4, Large files none,
+  Generated dirs `.pytest_cache`, `.venv`,
+  `src/repodoctor/__pycache__`, `tests/__pycache__`, Syntax
+  errors none, TODO markers none, "Findings: none",
+  "Found no findings."
+- `.venv/bin/python -m repodoctor . --format json` — valid JSON,
+  exit 0, `schema_version` 1, `tool_version` "0.1.0",
+  `summary` all zeros, `files` listing all 22 files,
+  `findings: []`.
+- `git diff --check` — clean. No secrets in the tree; `.venv/` is
+  ignored. The new tests contain no literal reminder-marker text,
+  so the tool still reports no findings on its own repository.
+
+### Commits
+- See `git log` for the hashes. Three commits, in plain English.
+- Not pushed — the parent pushes to GitHub later.
+
+### Next steps
+- Strict mode (non-zero exit on findings), per the plan.
