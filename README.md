@@ -12,8 +12,8 @@ text files, and any simple findings (for example, a missing README).
 
 > Built as part of a 30-day portfolio challenge, Nov–Dec 2026.
 > This is the working tool: package layout, CLI entry point,
-> read-only scanner, ten checks, text/JSON output, and pytest tests.
-> More checks (strict mode) are planned.
+> read-only scanner, ten checks, text/JSON output, strict mode,
+> and pytest tests. More checks are planned.
 
 ## Problem
 
@@ -41,6 +41,7 @@ repodoctor .
 repodoctor ./my-project
 repodoctor ./my-project --format json
 repodoctor ./my-project --no-color
+repodoctor ./my-project --strict
 python -m repodoctor --help
 python -m repodoctor --version
 ```
@@ -96,9 +97,28 @@ When the text output goes to a terminal, the severity labels
 (`[error]`, `[warning]`, `[info]`) are coloured; piped or redirected
 output stays plain text. Use `--no-color` to turn the colour off.
 
-Exit codes: `0` means the scan completed (even if findings are
-warnings); `2` means the scan itself failed, for example the target
-does not exist.
+## Strict mode
+
+`--strict` is for scripts and CI, where a scan that found anything
+should fail the step. It works with both text and JSON output:
+
+```bash
+repodoctor ./my-project --strict
+repodoctor ./my-project --strict --format json
+```
+
+The full report is still printed — only the exit code changes. Any
+finding counts: an error, a warning, or an informational note.
+
+## Exit codes
+
+- `0` — the scan ran. Without `--strict`, findings do not change
+  the exit code; with `--strict`, `0` means the scan found nothing.
+- `1` — strict mode was given (`--strict`) and the scan found at
+  least one finding (an error, a warning or a note).
+- `2` — a usage problem: the command line was wrong (for example a
+  bad flag — argparse exits 2 on bad arguments), or the folder to
+  scan does not exist.
 
 ## JSON output
 
@@ -229,7 +249,6 @@ python -m pytest -q
 ## Limitations
 
 - Only the ten checks above.
-- No strict mode / non-zero exit on findings yet (planned).
 - No configuration file yet.
 - The scanner skips `.git`, `.venv`, `venv`, `__pycache__`, `.tox`,
   `.mypy_cache`, `.pytest_cache`, `dist` and `build` directories when

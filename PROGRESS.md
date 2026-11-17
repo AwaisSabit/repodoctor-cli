@@ -380,5 +380,60 @@
 - See `git log` for the hashes. Three commits, in plain English.
 - Not pushed — the parent pushes to GitHub later.
 
+## Day 7 — 2026-11-17 (strict mode and exit codes)
+
+### Done
+- Added a `--strict` flag to the CLI (`cli.py`): when set, the scan
+  exits 1 if it found ANY finding — an error, a warning or an
+  informational note — and exits 0 when it found nothing. The flag
+  works with both `--format text` and `--format json`, and the full
+  report is still printed in strict mode; only the exit code
+  changes. Non-strict behaviour is unchanged: a scan with findings
+  still exits 0.
+- The scanner stays read-only (it only reads files; it never writes,
+  deletes or runs anything in the scanned repo), and the JSON schema
+  is unchanged — `schema_version` stays 1, no field added, removed
+  or renamed.
+- Documented strict mode and the exit codes in the README: a new
+  "Strict mode" section in the usage area, and an "Exit codes"
+  section in plain words — 0 means the scan ran (findings do not
+  change the exit code without `--strict`, or strict mode found
+  nothing), 1 means strict mode found at least one finding, 2 means
+  a usage problem (a bad command line, or the folder to scan does
+  not exist). The Limitations list no longer says strict mode is
+  planned. No day numbers in the README, as always.
+
+### Tests / checks run (Day 7)
+- `.venv/bin/python -m pytest -q` → **84 passed in 0.46s**
+  (77 existing tests + 7 new tests in `tests/test_strict.py`:
+  strict mode with findings exits 1 in text format and still
+  prints the full report; strict mode with no findings exits 0;
+  non-strict mode with findings still exits 0; strict mode with
+  `--format json` exits 1 and still prints valid JSON with the
+  findings and the summary; `--help` accepts the `--strict` flag;
+  a folder whose only finding is a missing-README warning also
+  fails strict mode; and a real subprocess run of
+  `python -m repodoctor --strict` exits 1).
+- `.venv/bin/python -m repodoctor .` — exit 0; reported 23 files,
+  12 Python files, README yes, Gitignore yes (`.gitignore`),
+  Dependency `pyproject.toml`, Test files 5, Large files none,
+  Generated dirs `.pytest_cache`, `.venv`,
+  `src/repodoctor/__pycache__`, `tests/__pycache__`, Syntax
+  errors none, TODO markers none, "Findings: none",
+  "Found no findings."
+- `.venv/bin/python -m repodoctor . --strict` — exit 0 on the
+  clean repo.
+- `.venv/bin/python -m repodoctor . --strict --format json` —
+  valid JSON, exit 0, `schema_version` 1, `findings: []`.
+- A temp folder with a README and a `.py` file only, scanned with
+  `--strict`, printed its 3 warnings and exited 1 (text and JSON).
+- `git diff --check` — clean. No secrets in the tree; `.venv/` is
+  ignored. The new tests contain no literal reminder-marker text,
+  so the tool still reports no findings on its own repository.
+
+### Commits
+- See `git log` for the hashes. Three commits, in plain English.
+- Not pushed — the parent pushes to GitHub later.
+
 ### Next steps
-- Strict mode (non-zero exit on findings), per the plan.
+- Configuration file support, per the plan.

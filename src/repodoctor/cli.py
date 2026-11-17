@@ -11,7 +11,8 @@ The CLI is deliberately built on :mod:`argparse` only (no third-party
 CLI framework on Day 1). It scans the target read-only, runs the basic
 checks, prints a summary, and exits 0 on a successful scan — even when
 findings are warnings. A non-zero exit means the scan itself failed
-(for example, the target does not exist). Severity labels in the text
+(for example, the target does not exist) or, in strict mode, that the
+scan found anything at all. Severity labels in the text
 report are coloured only when the output goes to a terminal; use
 ``--no-color`` to turn that off.
 """
@@ -47,6 +48,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Output format: human-readable text (default) or JSON for CI.",
     )
     parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Exit 1 when the scan finds anything (an error, a warning "
+        "or a note). Without this flag, findings do not change the "
+        "exit code. The full report is still printed either way.",
+    )
+    parser.add_argument(
         "--no-color",
         action="store_true",
         help="Do not colour severity labels in the text report, even "
@@ -62,7 +70,14 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Run the CLI and return the process exit code (0 on success)."""
+    """Run the CLI and return the process exit code.
+
+    Exit codes: ``0`` when the scan ran (findings do not change the
+    exit code unless ``--strict`` was given), ``1`` when ``--strict``
+    was given and the scan found anything, ``2`` when the scan itself
+    failed (for example, the target does not exist) or the command
+    line was wrong.
+    """
     parser = build_parser()
     args = parser.parse_args(argv)
 
@@ -80,6 +95,8 @@ def main(argv: list[str] | None = None) -> int:
         # terminal; piped or redirected output stays plain text.
         use_color = sys.stdout.isatty() and not args.no_color
         print(format_summary(result, use_color=use_color))
+    if args.strict and result.findings:
+        return 1
     return 0
 
 
