@@ -437,3 +437,103 @@
 
 ### Next steps
 - Configuration file support, per the plan.
+
+## Day 8 — 2026-11-18 (unit tests for every check)
+
+### Coverage audit first
+Every check in `checks.py` was audited against the existing tests
+before anything new was written:
+
+- Already covered by dedicated tests, left alone: the `.gitignore`
+  check (missing, both exclusions present, each one missing, entries
+  without a slash), the dependency-file check (missing, each of the
+  four accepted files, `pyproject.toml` preferred), the test-structure
+  check (missing, a `tests/` directory, a root `test_*.py` file), the
+  large-file check (one byte over flagged, one byte under not flagged,
+  a large file inside `.venv` never flagged), the generated-directory
+  check (listed in `.gitignore`, not listed, no `.gitignore` at all,
+  entry without a slash, a nested directory covered by a name entry,
+  a nested directory not recorded twice), the syntax check (error on
+  line 1, error on line 3, a clean file, code only compiled never
+  run, two broken files, a broken file inside `.venv`), and the
+  reminder-marker check (counted per file, a word with no colon, a
+  binary file, all four marker words, a clean folder). The reporter
+  and strict-mode tests were already covered too, and were not
+  duplicated.
+- Uncovered: no test had ever called a check function directly —
+  every existing test reached the checks through `scan_path`, even
+  though the checks are pure functions of a `ScanResult`. The
+  no-Python-files check had no dedicated test at all (only an
+  incidental appearance in a CLI JSON test), and the empty-directory
+  and README checks had no direct tests either. A string of edge
+  cases was also untested: a file exactly at the 1 MB threshold, the
+  singular "1 reminder marker" wording, both `.gitignore` exclusions
+  missing at once, a full-path `.gitignore` entry for a nested
+  generated directory, several large files or generated directories
+  at once, README name variants, a dependency file outside the root,
+  the remaining test-file shapes (`test/` singular, `*_test.py`,
+  a non-Python file under `tests/`), a comments-only `.gitignore`,
+  a `.gitignore` outside the root, a non-UTF-8 `.py` file, lowercase
+  marker words, a marker word inside a longer word, markers in
+  `.txt`/`.json` files, `.git` as a generated directory, `.tox` as a
+  generated directory, and the `human_size` helper itself.
+
+### Done
+- Added `tests/test_check_units.py` (30 tests): direct unit tests for
+  every one of the ten check functions, built on hand-made
+  `ScanResult` objects with no filesystem at all — each check's happy
+  path, finding path and edge cases. Highlights: the empty-directory
+  check plus `run_checks` on an empty result reporting exactly the
+  six presence findings in check order (and storing them on the
+  result); the no-Python-files check asserted as info-level, not a
+  warning; the `.gitignore` check naming both missing exclusions;
+  the large-file check reporting two files with their sizes; the
+  generated-directory check accepting a full-path entry and reporting
+  two directories; the syntax check naming file, line and message;
+  the reminder-marker check using "1 reminder marker" for one and
+  "N reminder markers" for several; the check set asserted in
+  reporting order; and direct tests of `human_size` (bytes, KB, MB).
+- Added `tests/test_check_edges.py` (18 tests): scanner edge cases
+  through temporary directories — a file of exactly 1 MB is not
+  flagged (the rule is "over 1 MB"); a bare `README` and a mixed-case
+  `Readme.md` both count; a `pyproject.toml` under `src/` does not
+  count as the dependency file, and `requirements.txt` is preferred
+  over `setup.py`; a `test/` folder and a root `*_test.py` file count
+  as tests, while a `.txt` file under `tests/` does not; a
+  comments-only `.gitignore` misses both exclusions and a nested
+  `.gitignore` does not count; a non-UTF-8 `.py` file is skipped,
+  never flagged; a broken file under `src/` is reported by its
+  relative path; a lowercase marker word and a marker word inside a
+  longer word are not counted, while markers in `.txt` and `.json`
+  files are; `.git` is never a generated directory, `.tox` is
+  flagged when unlisted, and two generated directories get two
+  warnings.
+- No check code needed changing: every edge case behaved exactly as
+  the checks and the README already described, so no fix was made.
+  The new test files contain no literal reminder-marker text, so the
+  tool still reports no findings on its own repository.
+
+### Tests / checks run (Day 8)
+- `.venv/bin/python -m pytest -q` → **132 passed in 0.84s**
+  (84 existing tests + 48 new: 30 direct unit tests in
+  `tests/test_check_units.py`, 18 scanner edge-case tests in
+  `tests/test_check_edges.py`).
+- `.venv/bin/python -m repodoctor .` — exit 0; reported 25 files,
+  14 Python files, README yes, Gitignore yes (`.gitignore`),
+  Dependency `pyproject.toml`, Test files 7, Large files none,
+  Generated dirs `.pytest_cache`, `.venv`,
+  `src/repodoctor/__pycache__`, `tests/__pycache__`, Syntax
+  errors none, TODO markers none, "Findings: none",
+  "Found no findings."
+- `.venv/bin/python -m repodoctor . --strict` — exit 0 on the
+  clean repo.
+- `git diff --check` — clean. No secrets in the tree; `.venv/` is
+  ignored. The new tests contain no literal reminder-marker text,
+  so the tool still reports no findings on its own repository.
+
+### Commits
+- See `git log` for the hashes. Three commits, in plain English.
+- Not pushed — the parent pushes to GitHub later.
+
+### Next steps
+- Configuration file support, per the plan.
