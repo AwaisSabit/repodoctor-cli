@@ -246,6 +246,13 @@ same findings, in the same order, with the same severities.
 python -m pytest -q
 ```
 
+The suite covers the scanner, every check, both reporters and
+strict mode with unit tests, plus end-to-end tests
+(`tests/test_cli_integration.py`) that run the real installed
+`repodoctor` command as a subprocess against temporary folders —
+including a scan of the tool's own repository, which must come back
+clean.
+
 ## Limitations
 
 - Only the ten checks above.

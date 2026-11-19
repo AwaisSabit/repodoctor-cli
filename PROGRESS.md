@@ -438,6 +438,78 @@
 ### Next steps
 - Configuration file support, per the plan.
 
+## Day 9 — 2026-11-19 (CLI integration tests: the real command, end to end)
+
+### Done
+- Added `tests/test_cli_integration.py` (14 tests): the first tests
+  that run the real installed `repodoctor` command as a subprocess
+  instead of calling the CLI functions in-process. Every test uses
+  the `.venv/bin/repodoctor` console script (falling back to
+  `python -m repodoctor` when the script is not there), with a
+  30-second timeout and an explicit working directory, and every
+  scanned folder is built in `tmp_path` — no network, no writes
+  outside the temporary folders, except for reading the project
+  root in the self-scan test.
+- Coverage: `--help` exits 0 and names every flag; `--version`
+  exits 0 and prints the package version; a text scan of a healthy
+  temp folder exits 0 with "Found no findings."; a text scan of a
+  messy temp folder (missing README, `.gitignore`, dependency file
+  and tests, a Python file that does not compile, a notes file
+  carrying one reminder marker) exits 0 non-strict, shows the
+  "Errors (1)", "Warnings (4)", "Notes (1)" group headings and
+  ends with "Found 1 error, 4 warnings and 1 note."; the same
+  folder with `--strict` exits 1 and still prints the full report;
+  the same folder with `--format json` exits 0 with valid JSON,
+  `schema_version` 1 and a summary of 1 error, 4 warnings, 1 note
+  matching the text counts; `--strict --format json` exits 1 with
+  valid JSON and the same summary; `--format json` on a healthy
+  folder has empty findings and an all-zero summary; a missing
+  folder exits 2 with a clear error naming the folder and no
+  traceback; an unknown flag exits 2 with a usage message and no
+  traceback; `--no-color` output has no ANSI escape codes, and
+  piped output is never coloured either; the scan is read-only
+  (file contents and modification times unchanged, no new files
+  created in the scanned folder); running with no target scans the
+  current directory; and a scan of the tool's own repository exits
+  0 with no findings — the real end-to-end proof the tool is clean
+  on itself.
+- One test expectation needed correcting while writing, and it was
+  the test that was wrong, not the tool: the JSON findings list
+  keeps check order (presence checks first, then the syntax and
+  marker checks), while the text report groups the same findings
+  by severity. That order is already locked in by an existing
+  reporter test, so the integration test now asserts the check
+  order and says so in a comment. No CLI code changed.
+- The new test file contains no literal reminder-marker text — the
+  marker in the temp notes file is built by joining string pieces —
+  so the tool still reports no findings on its own repository.
+- Updated the README "Tests" section to say the suite includes
+  these end-to-end tests, with no day numbers.
+
+### Tests / checks run (Day 9)
+- `.venv/bin/python -m pytest -q` → **146 passed in 3.00s**
+  (132 existing tests + 14 new integration tests; the new file
+  alone runs in 2.63s, well under the 10-second budget).
+- `.venv/bin/python -m repodoctor .` — exit 0; reported 26 files,
+  15 Python files, README yes, Gitignore yes (`.gitignore`),
+  Dependency `pyproject.toml`, Test files 8, Large files none,
+  Generated dirs `.pytest_cache`, `.venv`,
+  `src/repodoctor/__pycache__`, `tests/__pycache__`, Syntax
+  errors none, TODO markers none, "Findings: none",
+  "Found no findings."
+- `.venv/bin/python -m repodoctor . --strict` — exit 0 on the
+  clean repo.
+- `git diff --check` — clean. No secrets in the tree; `.venv/` is
+  ignored. The new tests contain no literal reminder-marker text,
+  so the tool still reports no findings on its own repository.
+
+### Commits
+- See `git log` for the hashes. Two commits, in plain English.
+- Not pushed — the parent pushes to GitHub later.
+
+### Next steps
+- Configuration file support, per the plan.
+
 ## Day 8 — 2026-11-18 (unit tests for every check)
 
 ### Coverage audit first
