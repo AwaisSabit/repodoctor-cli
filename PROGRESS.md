@@ -609,3 +609,98 @@ before anything new was written:
 
 ### Next steps
 - Configuration file support, per the plan.
+
+## Day 10 — 2026-11-20 (cross-platform paths and the read-only proof)
+
+### Audit first
+- `scanner.py`, `checks.py`, `reporters.py` and `cli.py` were audited
+  for platform-specific path handling. What was already right: the
+  whole tool uses `pathlib` throughout — no `os.path.join` and no
+  string concatenation on paths anywhere in `src/`. What was wrong:
+  every path the tool reported was rendered with `str(path)`, which
+  gives backslashes on Windows, so text and JSON output would differ
+  by platform; `.gitignore` entries written with backslashes (a
+  Windows-written file listing `src\__pycache__` or `.venv\`) did
+  not match the directories they name; and the skipped-directory
+  check split paths on the host platform's separator only, so a
+  Windows-style relative path on Linux would arrive as one part and
+  be missed.
+
+### Done
+- Cross-platform paths, all in code, not just in docs:
+  1. Every path the tool reports now uses forward slashes on every
+     platform: all `str(path)` renderings in `reporters.py` (text
+     summary, JSON document, and the target itself) and every path
+     in a finding message in `checks.py` now use
+     `Path.as_posix()`. The JSON schema is unchanged
+     (`schema_version` stays 1) — only the separator in path
+     values changed.
+  2. `.gitignore` entries are stored with forward slashes
+     (`_normalize_entry` in `scanner.py` turns backslashes into
+     forward slashes when the file is read), so a Windows-written
+     `.gitignore` matches the same directories as a forward-slash
+     one — for the required exclusions, for generated-directory
+     coverage, and in the JSON `gitignore_entries` list. The
+     matcher in `checks.py` normalises entries the same way, so
+     hand-built results with backslash entries match too.
+  3. The skipped/generated-directory logic works with either
+     separator: a new `_path_parts` helper in `scanner.py` splits
+     a path on both `/` and `\`, and `_is_skipped` and the
+     test-file folder check use it. The syntax-error file name
+     passed to `compile()` is forward-slash form too, and the
+     "target does not exist" / "not a directory" errors print the
+     target the same way.
+- Read-only proof, strengthened with a dedicated module
+  (`tests/test_readonly.py`, 5 tests): the scanner's code was
+  re-audited — it only calls `rglob`, `stat`, `is_dir`, `is_file`
+  and `read_text`, and `compile()` on source text never writes
+  bytecode the way importing a module would — and the tests now
+  prove it: a scan leaves a folder byte-identical (names,
+  contents and modification times, with no new file appearing);
+  scanning a folder with a broken Python file creates no `.pyc`
+  file and no `__pycache__` directory; no file in the tree gets a
+  newer modification time; and a scan of a read-only directory
+  (files `0o444`, directories `0o555`) still succeeds, still
+  reports its findings, and still creates nothing.
+- Updated the README with the forward-slash guarantee and the new
+  test modules, with no day numbers. The new test files contain
+  no literal reminder-marker text, so the tool still reports no
+  findings on its own repository.
+
+### Tests / checks run (Day 10)
+- `.venv/bin/python -m pytest -q` → **160 passed in 6.72s**
+  (146 existing tests + 14 new: 9 in
+  `tests/test_cross_platform.py` — path parts split on either
+  separator, skipped directories recognised with backslashes,
+  `.gitignore` entries stored with forward slashes, backslash
+  exclusions counting as present, a backslash entry covering a
+  generated directory, an end-to-end scan honouring backslash
+  `.gitignore` entries, and the text report, JSON report and
+  finding messages all using forward slashes for Windows-style
+  paths built with `PureWindowsPath` — and 5 in
+  `tests/test_readonly.py` — the folder byte-identical after a
+  scan, no bytecode from a broken file, no modification time
+  changed, and a read-only directory scanned successfully with
+  nothing created).
+- `.venv/bin/python -m repodoctor .` — exit 0; reported 28 files,
+  17 Python files, README yes, Gitignore yes (`.gitignore`),
+  Dependency `pyproject.toml`, Test files 10, Large files none,
+  Generated dirs `.pytest_cache`, `.venv`,
+  `src/repodoctor/__pycache__`, `tests/__pycache__`, Syntax
+  errors none, TODO markers none, "Findings: none",
+  "Found no findings."
+- `.venv/bin/python -m repodoctor . --strict` — exit 0 on the
+  clean repo.
+- `.venv/bin/python -m repodoctor . --format json` — valid JSON,
+  exit 0, `schema_version` 1, `findings: []`.
+- `git diff --check` — clean. No secrets in the tree; `.venv/` is
+  ignored. The new tests contain no literal reminder-marker
+  text, so the tool still reports no findings on its own
+  repository.
+
+### Commits
+- See `git log` for the hashes. Three commits, in plain English.
+- Not pushed — the parent pushes to GitHub later.
+
+### Next steps
+- Configuration file support, per the plan.

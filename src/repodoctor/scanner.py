@@ -72,18 +72,32 @@ DEPENDENCY_FILES = (
 REQUIRED_GITIGNORE_EXCLUSIONS = (".venv/", "__pycache__/")
 
 
+def _normalize_entry(entry: str) -> str:
+    """Return a .gitignore entry with forward slashes.
+
+    A .gitignore written on Windows may list entries with backslash
+    separators (``src\\__pycache__`` or ``.venv\\``); those must match
+    the same directory as the forward-slash form, so entries are
+    stored in forward-slash form whatever platform wrote the file.
+    The entry text itself (apart from the separator) is untouched.
+    """
+    return entry.replace("\\", "/")
+
+
 def _gitignore_entries(gitignore_path: Path) -> set[str]:
     """Return the entries of ``gitignore_path``, ignoring blanks and comments.
 
     Reading the file is a read-only operation; a file that cannot be
-    read as text is treated as if it had no entries at all.
+    read as text is treated as if it had no entries at all. Entries
+    are stored with forward slashes (see ``_normalize_entry``), so
+    matching and JSON output are identical on every platform.
     """
     try:
         text = gitignore_path.read_text(encoding="utf-8", errors="ignore")
     except OSError:
         return set()
     return {
-        line.strip()
+        _normalize_entry(line.strip())
         for line in text.splitlines()
         if line.strip() and not line.strip().startswith("#")
     }
@@ -151,10 +165,14 @@ def _check_syntax(source: str, relative: Path, result: ScanResult) -> None:
     """Compile ``source`` and record a syntax error, if there is one.
 
     :func:`compile` only parses the source; it never runs it, so a
-    file with dangerous or broken code is still safe to scan.
+    file with dangerous or broken code is still safe to scan. It also
+    never writes bytecode: unlike importing a module, compiling a
+    string creates no ``.pyc`` file. The file name is passed in
+    forward-slash form so error messages read the same on Windows,
+    macOS and Linux.
     """
     try:
-        compile(source, str(relative), "exec")
+        compile(source, relative.as_posix(), "exec")
     except SyntaxError as exc:
         result.syntax_errors.append(
             (relative, exc.lineno or 1, exc.msg or str(exc))
@@ -168,9 +186,28 @@ def _count_todo_markers(source: str, relative: Path, result: ScanResult) -> None
         result.todo_markers.append((relative, count))
 
 
+def _path_parts(path: Path) -> tuple[str, ...]:
+    """Return the parts of ``path``, splitting on either separator.
+
+    ``pathlib`` splits on the host platform's separator only, so a
+    relative path written with the other platform's separator (for
+    example a Windows-style ``src\\__pycache__`` on Linux) would
+    arrive as a single part and the skipped-directory check would
+    miss it. Splitting on both ``/`` and ``\\`` keeps the skipped
+    and generated-directory logic working with either separator.
+    """
+    return tuple(
+        part for part in re.split(r"[/\\]", str(path)) if part not in ("", ".")
+    )
+
+
 def _is_skipped(path: Path) -> bool:
-    """Return True if any part of ``path`` is a skipped directory."""
-    return any(part in SKIPPED_DIRS for part in path.parts)
+    """Return True if any part of ``path`` is a skipped directory.
+
+    Either separator counts, so a Windows-style path is recognised
+    on Linux and macOS too (see ``_path_parts``).
+    """
+    return any(part in SKIPPED_DIRS for part in _path_parts(path))
 
 
 def scan_path(target: str | Path) -> ScanResult:
@@ -185,9 +222,13 @@ def scan_path(target: str | Path) -> ScanResult:
     """
     target_path = Path(target)
     if not target_path.exists():
-        raise FileNotFoundError(f"target does not exist: {target_path}")
+        raise FileNotFoundError(
+            f"target does not exist: {target_path.as_posix()}"
+        )
     if not target_path.is_dir():
-        raise NotADirectoryError(f"target is not a directory: {target_path}")
+        raise NotADirectoryError(
+            f"target is not a directory: {target_path.as_posix()}"
+        )
 
     result = ScanResult(target=target_path.resolve())
     for path in sorted(target_path.rglob("*")):
@@ -215,9 +256,13 @@ def scan_path(target: str | Path) -> ScanResult:
             result.python_files += 1
         # A test file is a .py file inside a tests/ or test/ folder, or
         # a file named test_*.py or *_test.py anywhere in the repo.
+        # Either separator counts for the folder names (see
+        # ``_path_parts``), so a Windows-style path is recognised
+        # on Linux and macOS too.
+        parts = _path_parts(relative)
         if path.suffix == ".py" and (
-            "tests" in relative.parts
-            or "test" in relative.parts
+            "tests" in parts
+            or "test" in parts
             or path.name.startswith("test_")
             or path.name.endswith("_test.py")
         ):

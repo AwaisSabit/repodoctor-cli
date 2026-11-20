@@ -240,6 +240,13 @@ then warnings, then informational notes — each group under its own
 heading, with a summary count at the end. The JSON report carries the
 same findings, in the same order, with the same severities.
 
+Paths are the same on every platform: every path in the text and
+JSON output uses forward slashes, even when the scan ran on Windows,
+so a report from Windows matches one from macOS or Linux. A
+`.gitignore` written on Windows (with backslash separators) is read
+the same way as one written with forward slashes, and generated
+directories are recognised with either separator.
+
 ## Tests
 
 ```bash
@@ -251,7 +258,11 @@ strict mode with unit tests, plus end-to-end tests
 (`tests/test_cli_integration.py`) that run the real installed
 `repodoctor` command as a subprocess against temporary folders —
 including a scan of the tool's own repository, which must come back
-clean.
+clean. Cross-platform path handling has its own tests
+(`tests/test_cross_platform.py`), and the read-only promise has its
+own (`tests/test_readonly.py`): a scan must leave the scanned folder
+byte-identical, create no bytecode files, and succeed on a
+read-only directory.
 
 ## Limitations
 

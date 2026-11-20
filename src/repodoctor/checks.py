@@ -20,10 +20,17 @@ def _is_ignored_by_gitignore(
 
     An entry counts with or without a trailing slash, and it may name
     the directory itself (``__pycache__/``) or its full relative path
-    (``src/__pycache__/``).
+    (``src/__pycache__/``). Entries written with backslash separators
+    (a Windows-written ``.gitignore`` listing ``src\\__pycache__``)
+    count the same as the forward-slash form, and a directory given
+    as a Windows-style path matches too: both sides are compared in
+    forward-slash form.
     """
-    names = {directory.name, str(directory)}
-    return any(entry.rstrip("/") in names for entry in gitignore_entries)
+    names = {directory.name, directory.as_posix()}
+    return any(
+        entry.replace("\\", "/").rstrip("/") in names
+        for entry in gitignore_entries
+    )
 
 
 def check_readme(result: ScanResult) -> Finding | None:
@@ -120,10 +127,10 @@ def check_large_files(result: ScanResult) -> list[Finding]:
             Finding(
                 code="large-file",
                 message=(
-                    f"File {path} is large ({human_size(size)}). Large "
-                    f"files slow down clones and do not belong in version "
-                    f"control — consider splitting it or storing it "
-                    f"outside the repository."
+                    f"File {path.as_posix()} is large ({human_size(size)}). "
+                    f"Large files slow down clones and do not belong in "
+                    f"version control — consider splitting it or storing "
+                    f"it outside the repository."
                 ),
                 severity="warning",
                 path=path,
@@ -145,14 +152,14 @@ def check_generated_dirs(result: ScanResult) -> list[Finding]:
             continue
         if result.has_gitignore:
             message = (
-                f"Generated directory {directory} exists but is not "
-                f"listed in .gitignore. Add {directory.name}/ to "
+                f"Generated directory {directory.as_posix()} exists but "
+                f"is not listed in .gitignore. Add {directory.name}/ to "
                 f".gitignore so it is not committed by accident."
             )
         else:
             message = (
-                f"Generated directory {directory} exists and there is "
-                f"no .gitignore file. Add {directory.name}/ to "
+                f"Generated directory {directory.as_posix()} exists and "
+                f"there is no .gitignore file. Add {directory.name}/ to "
                 f".gitignore so it is not committed by accident."
             )
         findings.append(
@@ -179,8 +186,8 @@ def check_syntax_errors(result: ScanResult) -> list[Finding]:
             Finding(
                 code="syntax-error",
                 message=(
-                    f"File {path} has a Python syntax error on line "
-                    f"{line}: {message}."
+                    f"File {path.as_posix()} has a Python syntax error "
+                    f"on line {line}: {message}."
                 ),
                 severity="error",
                 path=path,
@@ -203,9 +210,9 @@ def check_todo_markers(result: ScanResult) -> list[Finding]:
             Finding(
                 code="todo-markers",
                 message=(
-                    f"File {path} contains {count} reminder {word} "
-                    f"(TODO, FIXME, XXX or HACK). This is information "
-                    f"only, not a problem."
+                    f"File {path.as_posix()} contains {count} reminder "
+                    f"{word} (TODO, FIXME, XXX or HACK). This is "
+                    f"information only, not a problem."
                 ),
                 severity="info",
                 path=path,

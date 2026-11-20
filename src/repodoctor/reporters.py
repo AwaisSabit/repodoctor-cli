@@ -78,29 +78,29 @@ def format_summary(result: ScanResult, use_color: bool = False) -> str:
     report keeps its friendly ``Findings: none`` message.
     """
     gitignore = (
-        f"yes ({result.gitignore_path})"
+        f"yes ({result.gitignore_path.as_posix()})"
         if result.has_gitignore
         else "no"
     )
     dependency = (
-        str(result.dependency_file) if result.dependency_file else "no"
+        result.dependency_file.as_posix() if result.dependency_file else "no"
     )
     large_files = (
         ", ".join(
-            f"{path} ({human_size(size)})"
+            f"{path.as_posix()} ({human_size(size)})"
             for path, size in result.large_files
         )
         if result.large_files
         else "none"
     )
     generated_dirs = (
-        ", ".join(str(directory) for directory in result.generated_dirs)
+        ", ".join(directory.as_posix() for directory in result.generated_dirs)
         if result.generated_dirs
         else "none"
     )
     syntax_errors = (
         ", ".join(
-            f"{path}: line {line}"
+            f"{path.as_posix()}: line {line}"
             for path, line, _ in result.syntax_errors
         )
         if result.syntax_errors
@@ -108,16 +108,16 @@ def format_summary(result: ScanResult, use_color: bool = False) -> str:
     )
     todo_markers = (
         ", ".join(
-            f"{path} ({count})" for path, count in result.todo_markers
+            f"{path.as_posix()} ({count})" for path, count in result.todo_markers
         )
         if result.todo_markers
         else "none"
     )
     lines = [
-        f"RepoDoctor — {result.target}",
+        f"RepoDoctor — {result.target.as_posix()}",
         f"  Files:        {result.total_files}",
         f"  Python files: {result.python_files}",
-        f"  README:       {'yes' + (f' ({result.readme_path})' if result.readme_path else '') if result.has_readme else 'no'}",
+        f"  README:       {'yes' + (f' ({result.readme_path.as_posix()})' if result.readme_path else '') if result.has_readme else 'no'}",
         f"  Gitignore:    {gitignore}",
         f"  Dependency:   {dependency}",
         f"  Test files:   {result.test_files}",
@@ -186,47 +186,53 @@ def format_json(result: ScanResult) -> str:
         "tool": "repodoctor",
         "schema_version": JSON_SCHEMA_VERSION,
         "tool_version": __version__,
-        "target": str(result.target),
+        "target": result.target.as_posix(),
         "total_files": result.total_files,
         "python_files": result.python_files,
         "has_python_files": result.has_python_files,
-        "files": [str(path) for path in result.files],
+        "files": [path.as_posix() for path in result.files],
         "has_readme": result.has_readme,
-        "readme_path": str(result.readme_path) if result.readme_path else None,
+        "readme_path": (
+            result.readme_path.as_posix() if result.readme_path else None
+        ),
         "has_gitignore": result.has_gitignore,
         "gitignore_path": (
-            str(result.gitignore_path) if result.gitignore_path else None
+            result.gitignore_path.as_posix()
+            if result.gitignore_path
+            else None
         ),
         "gitignore_entries": sorted(result.gitignore_entries),
         "gitignore_missing_exclusions": list(
             result.gitignore_missing_exclusions
         ),
         "dependency_file": (
-            str(result.dependency_file) if result.dependency_file else None
+            result.dependency_file.as_posix()
+            if result.dependency_file
+            else None
         ),
         "test_files": result.test_files,
         "has_tests": result.has_tests,
         "large_files": [
             {
-                "path": str(path),
+                "path": path.as_posix(),
                 "size_bytes": size,
                 "size": human_size(size),
             }
             for path, size in result.large_files
         ],
         "generated_dirs": [
-            str(directory) for directory in result.generated_dirs
+            directory.as_posix() for directory in result.generated_dirs
         ],
         "syntax_errors": [
             {
-                "path": str(path),
+                "path": path.as_posix(),
                 "line": line,
                 "message": message,
             }
             for path, line, message in result.syntax_errors
         ],
         "todo_markers": [
-            {"path": str(path), "count": count}
+            {"path": path.as_posix(), "count": count}
             for path, count in result.todo_markers
         ],
         "findings": [
@@ -234,7 +240,9 @@ def format_json(result: ScanResult) -> str:
                 "code": finding.code,
                 "message": finding.message,
                 "severity": finding.severity,
-                "path": str(finding.path) if finding.path else None,
+                "path": (
+                    finding.path.as_posix() if finding.path else None
+                ),
             }
             for finding in result.findings
         ],
