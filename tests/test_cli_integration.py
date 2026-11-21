@@ -19,8 +19,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
-
 from repodoctor import __version__
 
 #: How long any single CLI run may take before the test gives up.
@@ -45,7 +43,9 @@ def _cli_command() -> list[str]:
     return [sys.executable, "-m", "repodoctor"]
 
 
-def _run_cli(*args: str, cwd: str | Path | None = None) -> subprocess.CompletedProcess[str]:
+def _run_cli(
+    *args: str, cwd: str | Path | None = None
+) -> subprocess.CompletedProcess[str]:
     """Run the real CLI once and return the finished process."""
     return subprocess.run(
         [*_cli_command(), *args],
@@ -61,9 +61,7 @@ def _healthy_folder(tmp_path: Path) -> None:
     """Fill ``tmp_path`` with a folder that has no findings at all."""
     (tmp_path / "README.md").write_text("# Example\n", encoding="utf-8")
     (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
-    (tmp_path / ".gitignore").write_text(
-        ".venv/\n__pycache__/\n", encoding="utf-8"
-    )
+    (tmp_path / ".gitignore").write_text(".venv/\n__pycache__/\n", encoding="utf-8")
     (tmp_path / "pyproject.toml").write_text(
         '[project]\nname = "example"\n', encoding="utf-8"
     )
@@ -86,9 +84,7 @@ def _messy_folder(tmp_path: Path) -> None:
     """
     (tmp_path / "broken.py").write_text("def broken(\n", encoding="utf-8")
     marker = "TO" + "DO" + ": finish the notes"
-    (tmp_path / "notes.txt").write_text(
-        f"Some notes.\n{marker}\n", encoding="utf-8"
-    )
+    (tmp_path / "notes.txt").write_text(f"Some notes.\n{marker}\n", encoding="utf-8")
 
 
 def _codes(payload: dict) -> list[str]:
@@ -258,8 +254,7 @@ def test_scan_is_read_only(tmp_path: Path) -> None:
     _messy_folder(tmp_path)
     before_files = sorted(p for p in tmp_path.rglob("*") if p.is_file())
     before_state = {
-        path: (path.read_bytes(), os.stat(path).st_mtime_ns)
-        for path in before_files
+        path: (path.read_bytes(), os.stat(path).st_mtime_ns) for path in before_files
     }
     proc = _run_cli(str(tmp_path))
     assert proc.returncode == 0

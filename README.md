@@ -262,7 +262,23 @@ clean. Cross-platform path handling has its own tests
 (`tests/test_cross_platform.py`), and the read-only promise has its
 own (`tests/test_readonly.py`): a scan must leave the scanned folder
 byte-identical, create no bytecode files, and succeed on a
-read-only directory.
+read-only directory. The JSON report structure has its own tests
+(`tests/test_json_schema.py`): the top-level keys, the type of every
+field, and the summary counts matching the findings list, on a clean
+repo and on a repo with findings of every severity. Strict-mode exit
+codes have extra tests (`tests/test_strict_extra.py`) for notes-only
+and error-only folders and for usage errors in both output modes.
+
+Every push and pull request runs the tests on Python 3.11 and 3.12
+through GitHub Actions (`.github/workflows/ci.yml`), along with the
+linter and the formatter check. The lint and format rules live in
+`pyproject.toml` and use ruff:
+
+```bash
+pip install -e ".[dev]"   # installs ruff
+ruff check .
+ruff format --check .
+```
 
 ## Limitations
 

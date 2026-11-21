@@ -13,9 +13,7 @@ from pathlib import Path
 from .models import Finding, ScanResult, human_size
 
 
-def _is_ignored_by_gitignore(
-    directory: Path, gitignore_entries: set[str]
-) -> bool:
+def _is_ignored_by_gitignore(directory: Path, gitignore_entries: set[str]) -> bool:
     """Return True when a .gitignore entry names ``directory``.
 
     An entry counts with or without a trailing slash, and it may name
@@ -28,8 +26,7 @@ def _is_ignored_by_gitignore(
     """
     names = {directory.name, directory.as_posix()}
     return any(
-        entry.replace("\\", "/").rstrip("/") in names
-        for entry in gitignore_entries
+        entry.replace("\\", "/").rstrip("/") in names for entry in gitignore_entries
     )
 
 
@@ -39,7 +36,9 @@ def check_readme(result: ScanResult) -> Finding | None:
         return None
     return Finding(
         code="missing-readme",
-        message="No README file found. Add a README.md describing what this project does.",
+        message=(
+            "No README file found. Add a README.md describing what this project does."
+        ),
         severity="warning",
     )
 
@@ -82,8 +81,7 @@ def check_gitignore(result: ScanResult) -> Finding | None:
         return Finding(
             code="gitignore-missing-exclusions",
             message=(
-                f"The .gitignore file is missing common Python exclusions: "
-                f"{missing}."
+                f"The .gitignore file is missing common Python exclusions: {missing}."
             ),
             severity="warning",
         )

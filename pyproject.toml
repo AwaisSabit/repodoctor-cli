@@ -22,6 +22,7 @@ classifiers = [
 
 [project.optional-dependencies]
 test = ["pytest>=8"]
+dev = ["ruff>=0.6"]
 
 [project.scripts]
 repodoctor = "repodoctor.cli:main"
@@ -34,3 +35,13 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+# Ruff is the linter and formatter. Keep the line length at 88 so it
+# matches the formatting the codebase already uses.
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+# E/W: style, F: unused imports and names, I: import order.
+select = ["E", "F", "W", "I"]

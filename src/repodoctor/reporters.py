@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 
 from . import __version__
-from .models import Finding, ScanResult, human_size
+from .models import ScanResult, human_size
 
 #: Version of the JSON report format. Bump it when a field is added,
 #: removed or renamed, so CI consumers can tell formats apart.
@@ -77,14 +77,13 @@ def format_summary(result: ScanResult, use_color: bool = False) -> str:
     a summary count line at the end. When there are no findings the
     report keeps its friendly ``Findings: none`` message.
     """
+    readme = f"yes ({result.readme_path.as_posix()})" if result.readme_path else "yes"
+    if not result.has_readme:
+        readme = "no"
     gitignore = (
-        f"yes ({result.gitignore_path.as_posix()})"
-        if result.has_gitignore
-        else "no"
+        f"yes ({result.gitignore_path.as_posix()})" if result.has_gitignore else "no"
     )
-    dependency = (
-        result.dependency_file.as_posix() if result.dependency_file else "no"
-    )
+    dependency = result.dependency_file.as_posix() if result.dependency_file else "no"
     large_files = (
         ", ".join(
             f"{path.as_posix()} ({human_size(size)})"
@@ -100,16 +99,13 @@ def format_summary(result: ScanResult, use_color: bool = False) -> str:
     )
     syntax_errors = (
         ", ".join(
-            f"{path.as_posix()}: line {line}"
-            for path, line, _ in result.syntax_errors
+            f"{path.as_posix()}: line {line}" for path, line, _ in result.syntax_errors
         )
         if result.syntax_errors
         else "none"
     )
     todo_markers = (
-        ", ".join(
-            f"{path.as_posix()} ({count})" for path, count in result.todo_markers
-        )
+        ", ".join(f"{path.as_posix()} ({count})" for path, count in result.todo_markers)
         if result.todo_markers
         else "none"
     )
@@ -117,7 +113,7 @@ def format_summary(result: ScanResult, use_color: bool = False) -> str:
         f"RepoDoctor — {result.target.as_posix()}",
         f"  Files:        {result.total_files}",
         f"  Python files: {result.python_files}",
-        f"  README:       {'yes' + (f' ({result.readme_path.as_posix()})' if result.readme_path else '') if result.has_readme else 'no'}",
+        f"  README:       {readme}",
         f"  Gitignore:    {gitignore}",
         f"  Dependency:   {dependency}",
         f"  Test files:   {result.test_files}",
@@ -131,9 +127,7 @@ def format_summary(result: ScanResult, use_color: bool = False) -> str:
         counts: dict[str, int] = {}
         for severity in SEVERITY_ORDER:
             group = [
-                finding
-                for finding in result.findings
-                if finding.severity == severity
+                finding for finding in result.findings if finding.severity == severity
             ]
             if not group:
                 continue
@@ -141,9 +135,7 @@ def format_summary(result: ScanResult, use_color: bool = False) -> str:
             lines.append(f"    {SEVERITY_HEADINGS[severity]} ({len(group)})")
             for finding in group:
                 label = _severity_label(finding.severity, use_color)
-                lines.append(
-                    f"      {label} {finding.code}: {finding.message}"
-                )
+                lines.append(f"      {label} {finding.code}: {finding.message}")
         lines.append(f"  {_summary_line(counts)}")
     else:
         lines.append("  Findings:     none")
@@ -192,23 +184,15 @@ def format_json(result: ScanResult) -> str:
         "has_python_files": result.has_python_files,
         "files": [path.as_posix() for path in result.files],
         "has_readme": result.has_readme,
-        "readme_path": (
-            result.readme_path.as_posix() if result.readme_path else None
-        ),
+        "readme_path": (result.readme_path.as_posix() if result.readme_path else None),
         "has_gitignore": result.has_gitignore,
         "gitignore_path": (
-            result.gitignore_path.as_posix()
-            if result.gitignore_path
-            else None
+            result.gitignore_path.as_posix() if result.gitignore_path else None
         ),
         "gitignore_entries": sorted(result.gitignore_entries),
-        "gitignore_missing_exclusions": list(
-            result.gitignore_missing_exclusions
-        ),
+        "gitignore_missing_exclusions": list(result.gitignore_missing_exclusions),
         "dependency_file": (
-            result.dependency_file.as_posix()
-            if result.dependency_file
-            else None
+            result.dependency_file.as_posix() if result.dependency_file else None
         ),
         "test_files": result.test_files,
         "has_tests": result.has_tests,
@@ -220,9 +204,7 @@ def format_json(result: ScanResult) -> str:
             }
             for path, size in result.large_files
         ],
-        "generated_dirs": [
-            directory.as_posix() for directory in result.generated_dirs
-        ],
+        "generated_dirs": [directory.as_posix() for directory in result.generated_dirs],
         "syntax_errors": [
             {
                 "path": path.as_posix(),
@@ -240,9 +222,7 @@ def format_json(result: ScanResult) -> str:
                 "code": finding.code,
                 "message": finding.message,
                 "severity": finding.severity,
-                "path": (
-                    finding.path.as_posix() if finding.path else None
-                ),
+                "path": (finding.path.as_posix() if finding.path else None),
             }
             for finding in result.findings
         ],

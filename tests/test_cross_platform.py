@@ -90,15 +90,10 @@ def test_gitignore_entry_with_backslash_covers_generated_dir() -> None:
     """A backslash entry names the same generated directory as the
     forward-slash form, with or without a trailing slash."""
     assert (
-        _is_ignored_by_gitignore(
-            Path("src/__pycache__"), {"src\\__pycache__\\"}
-        )
+        _is_ignored_by_gitignore(Path("src/__pycache__"), {"src\\__pycache__\\"})
         is True
     )
-    assert (
-        _is_ignored_by_gitignore(Path(".venv"), {".venv\\"})
-        is True
-    )
+    assert _is_ignored_by_gitignore(Path(".venv"), {".venv\\"}) is True
     assert (
         _is_ignored_by_gitignore(
             PureWindowsPath("src\\__pycache__"),
@@ -107,10 +102,7 @@ def test_gitignore_entry_with_backslash_covers_generated_dir() -> None:
         is True
     )
     assert (
-        _is_ignored_by_gitignore(
-            Path("src/__pycache__"), {"src\\other__\\"}
-        )
-        is False
+        _is_ignored_by_gitignore(Path("src/__pycache__"), {"src\\other__\\"}) is False
     )
 
 
@@ -138,9 +130,7 @@ def test_scan_honours_backslash_gitignore_entries(
     findings = run_checks(result)
 
     assert result.gitignore_missing_exclusions == []
-    assert "generated-dir-not-ignored" not in [
-        finding.code for finding in findings
-    ]
+    assert "generated-dir-not-ignored" not in [finding.code for finding in findings]
     assert findings == []
 
 
@@ -167,9 +157,7 @@ def _windows_style_result() -> ScanResult:
     ]
     result.large_files = [(PureWindowsPath("src\\big.bin"), 2_000_000)]
     result.generated_dirs = [PureWindowsPath("src\\__pycache__")]
-    result.syntax_errors = [
-        (PureWindowsPath("src\\broken.py"), 1, "invalid syntax")
-    ]
+    result.syntax_errors = [(PureWindowsPath("src\\broken.py"), 1, "invalid syntax")]
     result.todo_markers = [(PureWindowsPath("notes.txt"), 1)]
     return result
 
@@ -214,10 +202,7 @@ def test_json_report_uses_forward_slashes_for_windows_paths() -> None:
     assert payload["generated_dirs"] == ["src/__pycache__"]
     assert payload["syntax_errors"][0]["path"] == "src/broken.py"
     assert payload["todo_markers"][0]["path"] == "notes.txt"
-    assert all(
-        "\\" not in finding["message"]
-        for finding in payload["findings"]
-    )
+    assert all("\\" not in finding["message"] for finding in payload["findings"])
 
 
 def test_check_messages_use_forward_slashes_for_windows_paths() -> None:

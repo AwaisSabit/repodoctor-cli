@@ -45,16 +45,12 @@ def _folder_with_broken_file(tmp_path: Path) -> Path:
     notes file, plus the usual healthy-project files."""
     (tmp_path / "README.md").write_text("# Example\n", encoding="utf-8")
     (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
-    (tmp_path / "broken.py").write_text(
-        "def broken(:\n    pass\n", encoding="utf-8"
-    )
+    (tmp_path / "broken.py").write_text("def broken(:\n    pass\n", encoding="utf-8")
     (tmp_path / "notes.txt").write_text(
         "Remember to tidy this up later.\n", encoding="utf-8"
     )
     (tmp_path / "src").mkdir()
-    (tmp_path / "src" / "mod.py").write_text(
-        "VALUE = 42\n", encoding="utf-8"
-    )
+    (tmp_path / "src" / "mod.py").write_text("VALUE = 42\n", encoding="utf-8")
     return tmp_path
 
 
@@ -69,8 +65,7 @@ def test_scan_leaves_folder_byte_identical(tmp_path: Path) -> None:
 
     assert _snapshot(folder) == before
     assert not any(
-        "__pycache__" in relative.split("/")
-        for relative in _snapshot(folder)
+        "__pycache__" in relative.split("/") for relative in _snapshot(folder)
     )
 
 
@@ -140,9 +135,7 @@ def test_scan_read_only_directory_still_succeeds(
         findings = run_checks(result)
 
         assert result.syntax_errors != []
-        assert any(
-            finding.code == "syntax-error" for finding in findings
-        )
+        assert any(finding.code == "syntax-error" for finding in findings)
         assert _snapshot(folder) == before
         assert list(folder.rglob("*.pyc")) == []
     finally:
@@ -166,8 +159,7 @@ def test_scan_read_only_directory_reports_no_new_files(
         scan_path(folder)
 
         assert sorted(
-            path.relative_to(folder).as_posix()
-            for path in folder.rglob("*")
+            path.relative_to(folder).as_posix() for path in folder.rglob("*")
         ) == sorted(
             [
                 "README.md",

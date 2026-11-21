@@ -20,9 +20,7 @@ def _healthy_folder(tmp_path) -> None:
     """Fill ``tmp_path`` with a folder that has no findings at all."""
     (tmp_path / "README.md").write_text("# Example\n", encoding="utf-8")
     (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
-    (tmp_path / ".gitignore").write_text(
-        ".venv/\n__pycache__/\n", encoding="utf-8"
-    )
+    (tmp_path / ".gitignore").write_text(".venv/\n__pycache__/\n", encoding="utf-8")
     (tmp_path / "pyproject.toml").write_text(
         '[project]\nname = "example"\n', encoding="utf-8"
     )
@@ -117,9 +115,7 @@ def test_strict_mode_fails_on_a_warning_only_folder(
     tests, so the only finding is the missing README warning.
     """
     (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
-    (tmp_path / ".gitignore").write_text(
-        ".venv/\n__pycache__/\n", encoding="utf-8"
-    )
+    (tmp_path / ".gitignore").write_text(".venv/\n__pycache__/\n", encoding="utf-8")
     (tmp_path / "pyproject.toml").write_text(
         '[project]\nname = "example"\n', encoding="utf-8"
     )

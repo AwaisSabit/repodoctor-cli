@@ -704,3 +704,101 @@ before anything new was written:
 
 ### Next steps
 - Configuration file support, per the plan.
+
+## Day 11 — 2026-11-21 (JSON schema tests, strict-mode exit codes, CI and lint)
+
+### Audit first
+- `reporters.py`, `cli.py` and `models.py` were read before anything
+  new was written, along with the existing `tests/test_reporters.py`
+  and `tests/test_strict.py`, so no coverage was duplicated. Already
+  covered and left alone: the schema and tool version fields, the
+  summary object matching the text summary line, every scan fact
+  present in the JSON output, and the 7 strict-mode tests (strict
+  exits 1 with findings in text and JSON, 0 with no findings, a
+  warning-only folder failing strict mode, and a real subprocess
+  run). Uncovered: no test had ever locked the JSON report's exact
+  top-level key set or the type of every field; no test had checked
+  the summary was counted from the same findings list it describes,
+  or the shape of the large-file, syntax-error and marker entries;
+  and strict mode had no tests for a notes-only folder, an
+  error-only folder, or the exit code 2 usage errors in both output
+  modes.
+
+### Done
+- JSON schema tests (`tests/test_json_schema.py`, 14 tests): the
+  report carries exactly the 23 documented top-level keys, no more
+  and no fewer, with or without findings; `schema_version` is the
+  integer 1 from the reporter's constant and `tool_version` is the
+  package version; every field has the documented type on a clean
+  repo and the right null/false form when a fact is missing; the
+  summary counts are recomputed from the findings list and must
+  match it exactly, with the summary keys exactly `total`, `errors`,
+  `warnings` and `notes`; every finding has exactly `code`,
+  `message`, `severity` and `path`, with a known severity; the
+  large-file entry carries path, size in bytes and human-readable
+  size, the syntax-error entry carries path, line and message, and
+  the marker entry carries path and count; listed files are
+  relative forward-slash paths; the gitignore entries are sorted;
+  and an empty folder still keeps its summary in step with its
+  findings. Validation is plain assertions — `jsonschema` is not
+  installed in the project venv, and no new dependency was added.
+- Strict-mode extra tests (`tests/test_strict_extra.py`, 9 tests):
+  strict JSON mode exits 0 with a valid all-zero report on a clean
+  repo; strict mode fails (exit 1) on a notes-only folder and on an
+  error-only folder, in text and in JSON; a bad flag exits 2 with a
+  usage message and no traceback, in text and in JSON mode; a
+  missing folder exits 2 naming the folder with no report printed,
+  in text and in JSON mode; and a missing folder still exits 2, not
+  1, even with `--strict`. The new test files contain no literal
+  reminder-marker text — markers in temp files are built by joining
+  string pieces — so the tool still reports no findings on its own
+  repository.
+- CI workflow and lint/format configuration: a new
+  `.github/workflows/ci.yml` runs the test suite, `ruff check` and
+  `ruff format --check` on every push and pull request, on Python
+  3.11 and 3.12 (the versions `pyproject.toml` supports —
+  `requires-python = ">=3.11"`). `pyproject.toml` now carries the
+  ruff settings (line length 88, target Python 3.11, lint rules E,
+  F, W and I) and a `dev` extra that installs ruff. Ruff 0.17.6 was
+  installed into the project venv. Running it on the existing code
+  found 6 problems, all fixed: two lines over 88 characters, three
+  unused imports, and the whole tree reformatted so `ruff format
+  --check` passes (13 files reformatted, mechanical whitespace and
+  line-joining only). One real cleanup came out of it: the README
+  line in the text reporter was a 138-character nested expression
+  and is now a small named value, with identical output. The README
+  gained a short CI/lint note, with no day numbers.
+- The JSON schema is unchanged — `schema_version` stays 1, no field
+  added, removed or renamed — and strict-mode behaviour is
+  unchanged: only the exit-code tests around it are new.
+
+### Tests / checks run (Day 11)
+- `.venv/bin/python -m pytest -q` → **183 passed in 3.86s**
+  (160 existing tests + 23 new: 14 in
+  `tests/test_json_schema.py`, 9 in `tests/test_strict_extra.py`).
+- `.venv/bin/ruff check .` — all checks passed (0 findings after
+  the fixes above).
+- `.venv/bin/ruff format --check .` — 21 files already formatted.
+- `.venv/bin/python -m repodoctor .` — exit 0; reported 38 files,
+  19 Python files, README yes, Gitignore yes (`.gitignore`),
+  Dependency `pyproject.toml`, Test files 12, Large files none,
+  Generated dirs `.pytest_cache`, `.venv`,
+  `src/repodoctor/__pycache__`, `tests/__pycache__`, Syntax
+  errors none, TODO markers none, "Findings: none",
+  "Found no findings."
+- `.venv/bin/python -m repodoctor . --strict` — exit 0 on the
+  clean repo.
+- `.venv/bin/python -m repodoctor . --format json` — valid JSON,
+  exit 0, `schema_version` 1, `findings: []`.
+- `.venv/bin/python -m repodoctor . --strict --format json` —
+  valid JSON, exit 0.
+- `git diff --check` — clean. No secrets in the tree; `.venv/` is
+  ignored. The new tests contain no literal reminder-marker text,
+  so the tool still reports no findings on its own repository.
+
+### Commits
+- See `git log` for the hashes. Three commits, in plain English.
+- Not pushed — the parent pushes to GitHub later.
+
+### Next steps
+- Configuration file support, per the plan.

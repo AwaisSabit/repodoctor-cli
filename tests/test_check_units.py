@@ -85,9 +85,7 @@ def test_readme_check_flags_a_missing_readme() -> None:
 
 def test_readme_check_passes_when_a_readme_is_present() -> None:
     """A result with a README gets no finding."""
-    assert check_readme(
-        _result(has_readme=True, readme_path=Path("README.md"))
-    ) is None
+    assert check_readme(_result(has_readme=True, readme_path=Path("README.md"))) is None
 
 
 # --- No-Python-files check ---
@@ -139,12 +137,15 @@ def test_gitignore_check_names_both_missing_exclusions() -> None:
 
 def test_gitignore_check_passes_when_nothing_is_missing() -> None:
     """A .gitignore with every exclusion gets no finding."""
-    assert check_gitignore(
-        _result(
-            has_gitignore=True,
-            gitignore_missing_exclusions=[],
+    assert (
+        check_gitignore(
+            _result(
+                has_gitignore=True,
+                gitignore_missing_exclusions=[],
+            )
         )
-    ) is None
+        is None
+    )
 
 
 # --- Dependency-file check ---
@@ -162,9 +163,9 @@ def test_dependency_check_flags_a_missing_dependency_file() -> None:
 
 def test_dependency_check_passes_when_a_dependency_file_exists() -> None:
     """A result naming a dependency file gets no finding."""
-    assert check_dependency_file(
-        _result(dependency_file=Path("requirements.txt"))
-    ) is None
+    assert (
+        check_dependency_file(_result(dependency_file=Path("requirements.txt"))) is None
+    )
 
 
 # --- Test-structure check ---
@@ -308,9 +309,7 @@ def test_syntax_check_passes_when_nothing_is_broken() -> None:
 
 def test_todo_markers_check_uses_singular_wording_for_one_marker() -> None:
     """One marker in a file is reported as "1 reminder marker"."""
-    findings = check_todo_markers(
-        _result(todo_markers=[(Path("app.py"), 1)])
-    )
+    findings = check_todo_markers(_result(todo_markers=[(Path("app.py"), 1)]))
 
     assert len(findings) == 1
     assert findings[0].code == "todo-markers"
@@ -322,9 +321,7 @@ def test_todo_markers_check_uses_singular_wording_for_one_marker() -> None:
 
 def test_todo_markers_check_uses_plural_wording_for_several() -> None:
     """Several markers in a file are reported as "N reminder markers"."""
-    findings = check_todo_markers(
-        _result(todo_markers=[(Path("notes.md"), 5)])
-    )
+    findings = check_todo_markers(_result(todo_markers=[(Path("notes.md"), 5)]))
 
     assert len(findings) == 1
     assert "5 reminder markers" in findings[0].message

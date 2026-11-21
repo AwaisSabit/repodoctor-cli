@@ -13,8 +13,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from repodoctor.checks import run_checks
 from repodoctor.scanner import (
     LARGE_FILE_THRESHOLD_BYTES,
@@ -82,9 +80,7 @@ def test_readme_with_mixed_case_counts(tmp_path: Path) -> None:
 def test_nested_dependency_file_does_not_count(tmp_path: Path) -> None:
     """A pyproject.toml under src/ is not the project's dependency file."""
     (tmp_path / "src").mkdir()
-    (tmp_path / "src" / "pyproject.toml").write_text(
-        "[project]\n", encoding="utf-8"
-    )
+    (tmp_path / "src" / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
     (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
 
     result = scan_path(tmp_path)
@@ -161,9 +157,7 @@ def test_gitignore_with_only_comments_misses_both_exclusions(
         "__pycache__/",
     ]
     finding = next(
-        f
-        for f in run_checks(result)
-        if f.code == "gitignore-missing-exclusions"
+        f for f in run_checks(result) if f.code == "gitignore-missing-exclusions"
     )
     assert ".venv/" in finding.message
     assert "__pycache__/" in finding.message
@@ -173,9 +167,7 @@ def test_nested_gitignore_does_not_count(tmp_path: Path) -> None:
     """A .gitignore under docs/ is not the project's .gitignore."""
     (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
     (tmp_path / "docs").mkdir()
-    (tmp_path / "docs" / ".gitignore").write_text(
-        FULL_GITIGNORE, encoding="utf-8"
-    )
+    (tmp_path / "docs" / ".gitignore").write_text(FULL_GITIGNORE, encoding="utf-8")
 
     result = scan_path(tmp_path)
 
@@ -213,9 +205,7 @@ def test_syntax_error_in_nested_file_reports_relative_path(
     result = scan_path(tmp_path)
     findings = run_checks(result)
 
-    assert result.syntax_errors == [
-        (Path("src/bad.py"), 1, "invalid syntax")
-    ]
+    assert result.syntax_errors == [(Path("src/bad.py"), 1, "invalid syntax")]
     error = next(f for f in findings if f.code == "syntax-error")
     assert "src/bad.py" in error.message
     assert "line 1" in error.message
@@ -226,9 +216,7 @@ def test_syntax_error_in_nested_file_reports_relative_path(
 
 def test_lowercase_marker_word_is_not_counted(tmp_path: Path) -> None:
     """A lowercase marker word with a colon is not a reminder marker."""
-    (tmp_path / "notes.md").write_text(
-        "todo: fix this later\n", encoding="utf-8"
-    )
+    (tmp_path / "notes.md").write_text("todo: fix this later\n", encoding="utf-8")
 
     result = scan_path(tmp_path)
 
@@ -252,9 +240,7 @@ def test_marker_word_inside_a_longer_word_is_not_counted(
 
 def test_markers_counted_in_txt_and_json_files(tmp_path: Path) -> None:
     """Markers are counted in every text suffix, not just code and docs."""
-    (tmp_path / "notes.txt").write_text(
-        _marker_text(TODO_MARKERS[0]), encoding="utf-8"
-    )
+    (tmp_path / "notes.txt").write_text(_marker_text(TODO_MARKERS[0]), encoding="utf-8")
     (tmp_path / "data.json").write_text(
         _marker_text(TODO_MARKERS[1], TODO_MARKERS[2]), encoding="utf-8"
     )

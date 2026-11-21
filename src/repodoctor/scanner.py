@@ -174,9 +174,7 @@ def _check_syntax(source: str, relative: Path, result: ScanResult) -> None:
     try:
         compile(source, relative.as_posix(), "exec")
     except SyntaxError as exc:
-        result.syntax_errors.append(
-            (relative, exc.lineno or 1, exc.msg or str(exc))
-        )
+        result.syntax_errors.append((relative, exc.lineno or 1, exc.msg or str(exc)))
 
 
 def _count_todo_markers(source: str, relative: Path, result: ScanResult) -> None:
@@ -222,13 +220,9 @@ def scan_path(target: str | Path) -> ScanResult:
     """
     target_path = Path(target)
     if not target_path.exists():
-        raise FileNotFoundError(
-            f"target does not exist: {target_path.as_posix()}"
-        )
+        raise FileNotFoundError(f"target does not exist: {target_path.as_posix()}")
     if not target_path.is_dir():
-        raise NotADirectoryError(
-            f"target is not a directory: {target_path.as_posix()}"
-        )
+        raise NotADirectoryError(f"target is not a directory: {target_path.as_posix()}")
 
     result = ScanResult(target=target_path.resolve())
     for path in sorted(target_path.rglob("*")):
@@ -238,9 +232,7 @@ def scan_path(target: str | Path) -> ScanResult:
             # contents are skipped. A generated directory nested
             # inside another skipped directory (for example
             # ``.venv/__pycache__``) is not recorded twice.
-            if path.name in GENERATED_DIRS and not _is_skipped(
-                relative.parent
-            ):
+            if path.name in GENERATED_DIRS and not _is_skipped(relative.parent):
                 result.generated_dirs.append(relative)
             continue
         if _is_skipped(relative):
@@ -281,9 +273,7 @@ def scan_path(target: str | Path) -> ScanResult:
             result.has_gitignore = True
             result.gitignore_path = relative
             result.gitignore_entries = _gitignore_entries(path)
-            result.gitignore_missing_exclusions = _gitignore_missing_exclusions(
-                path
-            )
+            result.gitignore_missing_exclusions = _gitignore_missing_exclusions(path)
         # Python files are compiled (never executed) and text files
         # are scanned for reminder markers. Each file is read once.
         if path.suffix in TEXT_FILE_SUFFIXES:

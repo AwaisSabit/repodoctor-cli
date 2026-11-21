@@ -177,8 +177,7 @@ def test_json_carries_same_findings_and_severities() -> None:
 
     payload = json.loads(format_json(result))
     assert [
-        (finding["code"], finding["severity"])
-        for finding in payload["findings"]
+        (finding["code"], finding["severity"]) for finding in payload["findings"]
     ] == [
         ("todo-markers", "info"),
         ("missing-readme", "warning"),

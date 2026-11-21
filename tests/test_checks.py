@@ -99,9 +99,7 @@ def test_gitignore_missing_venv_exclusion_warns(tmp_path: Path) -> None:
 def test_gitignore_entries_without_slash_still_count(tmp_path: Path) -> None:
     """Entries written as `.venv` and `__pycache__` (no slash) count."""
     (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
-    (tmp_path / ".gitignore").write_text(
-        ".venv\n__pycache__\n", encoding="utf-8"
-    )
+    (tmp_path / ".gitignore").write_text(".venv\n__pycache__\n", encoding="utf-8")
 
     result = scan_path(tmp_path)
 
@@ -256,9 +254,7 @@ def test_large_file_just_under_threshold_is_not_flagged(
     tmp_path: Path,
 ) -> None:
     """A file one byte under 1 MB produces no large-file finding."""
-    (tmp_path / "almost.bin").write_bytes(
-        b"x" * (LARGE_FILE_THRESHOLD_BYTES - 1)
-    )
+    (tmp_path / "almost.bin").write_bytes(b"x" * (LARGE_FILE_THRESHOLD_BYTES - 1))
 
     result = scan_path(tmp_path)
 
@@ -289,13 +285,9 @@ def test_large_file_inside_skipped_directory_is_not_flagged(
 def test_generated_dir_listed_in_gitignore_passes(tmp_path: Path) -> None:
     """A dist/ folder listed in .gitignore produces no finding."""
     (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
-    (tmp_path / ".gitignore").write_text(
-        FULL_GITIGNORE + "dist/\n", encoding="utf-8"
-    )
+    (tmp_path / ".gitignore").write_text(FULL_GITIGNORE + "dist/\n", encoding="utf-8")
     (tmp_path / "dist").mkdir()
-    (tmp_path / "dist" / "app-0.1.0.tar.gz").write_text(
-        "archive\n", encoding="utf-8"
-    )
+    (tmp_path / "dist" / "app-0.1.0.tar.gz").write_text("archive\n", encoding="utf-8")
 
     result = scan_path(tmp_path)
     findings = run_checks(result)
@@ -341,9 +333,7 @@ def test_generated_dir_flagged_when_no_gitignore(tmp_path: Path) -> None:
 def test_generated_dir_entry_without_slash_still_counts(tmp_path: Path) -> None:
     """An entry written as `dist` (no slash) still covers dist/."""
     (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
-    (tmp_path / ".gitignore").write_text(
-        FULL_GITIGNORE + "dist\n", encoding="utf-8"
-    )
+    (tmp_path / ".gitignore").write_text(FULL_GITIGNORE + "dist\n", encoding="utf-8")
     (tmp_path / "dist").mkdir()
 
     result = scan_path(tmp_path)
@@ -398,9 +388,7 @@ def test_cli_text_output_shows_large_files_and_generated_dirs(
 ) -> None:
     """Text output lists large files (with size) and generated dirs."""
     (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
-    (tmp_path / "big.bin").write_bytes(
-        b"x" * (LARGE_FILE_THRESHOLD_BYTES + 1)
-    )
+    (tmp_path / "big.bin").write_bytes(b"x" * (LARGE_FILE_THRESHOLD_BYTES + 1))
     (tmp_path / "dist").mkdir()
 
     assert main([str(tmp_path)]) == 0
@@ -417,9 +405,7 @@ def test_cli_json_output_shows_large_files_and_generated_dirs(
 ) -> None:
     """JSON output carries the large-file and generated-dir facts."""
     (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
-    (tmp_path / "big.bin").write_bytes(
-        b"x" * (LARGE_FILE_THRESHOLD_BYTES + 1)
-    )
+    (tmp_path / "big.bin").write_bytes(b"x" * (LARGE_FILE_THRESHOLD_BYTES + 1))
     (tmp_path / "dist").mkdir()
 
     assert main([str(tmp_path), "--format", "json"]) == 0
@@ -467,9 +453,7 @@ def test_syntax_error_on_later_line_names_the_line(
     tmp_path: Path,
 ) -> None:
     """The finding names the line where the syntax breaks."""
-    (tmp_path / "bad.py").write_text(
-        "x = 1\ny = 2\ndef broken(:\n", encoding="utf-8"
-    )
+    (tmp_path / "bad.py").write_text("x = 1\ny = 2\ndef broken(:\n", encoding="utf-8")
 
     result = scan_path(tmp_path)
     findings = run_checks(result)
@@ -522,9 +506,7 @@ def test_syntax_error_inside_skipped_directory_is_not_flagged(
 ) -> None:
     """A broken file under .venv is never scanned and never flagged."""
     (tmp_path / ".venv").mkdir()
-    (tmp_path / ".venv" / "bad.py").write_text(
-        "def broken(:\n", encoding="utf-8"
-    )
+    (tmp_path / ".venv" / "bad.py").write_text("def broken(:\n", encoding="utf-8")
     (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
 
     result = scan_path(tmp_path)
@@ -545,9 +527,7 @@ def _marker_text(*markers: str) -> str:
 def test_todo_markers_counted_per_file(tmp_path: Path) -> None:
     """Markers are counted per file: 3 in notes, 1 in app code."""
     (tmp_path / "notes.md").write_text(
-        _marker_text(
-            TODO_MARKERS[0], TODO_MARKERS[0], TODO_MARKERS[1]
-        ),
+        _marker_text(TODO_MARKERS[0], TODO_MARKERS[0], TODO_MARKERS[1]),
         encoding="utf-8",
     )
     (tmp_path / "app.py").write_text(
@@ -583,9 +563,7 @@ def test_todo_marker_without_colon_is_not_counted(tmp_path: Path) -> None:
 
 def test_todo_markers_in_non_text_file_not_counted(tmp_path: Path) -> None:
     """Marker words inside a binary file are not counted."""
-    (tmp_path / "data.bin").write_bytes(
-        TODO_MARKERS[0].encode() + b": fix this\n"
-    )
+    (tmp_path / "data.bin").write_bytes(TODO_MARKERS[0].encode() + b": fix this\n")
     (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
 
     result = scan_path(tmp_path)
@@ -596,9 +574,7 @@ def test_todo_markers_in_non_text_file_not_counted(tmp_path: Path) -> None:
 
 def test_all_four_marker_words_count(tmp_path: Path) -> None:
     """Each of the four marker words counts when followed by a colon."""
-    (tmp_path / "notes.md").write_text(
-        _marker_text(*TODO_MARKERS), encoding="utf-8"
-    )
+    (tmp_path / "notes.md").write_text(_marker_text(*TODO_MARKERS), encoding="utf-8")
 
     result = scan_path(tmp_path)
 
