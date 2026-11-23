@@ -3,7 +3,8 @@
 A command-line repository health checker for Python projects.
 
 RepoDoctor scans a folder **read-only** — it never modifies, deletes, or
-executes anything in the scanned repository — and reports basic project
+executes anything in the scanned repository, and it never follows
+symbolic links out of it — and reports basic project
 hygiene: how many files and Python files it found, whether a README,
 a `.gitignore`, a dependency file and tests exist, any files larger
 than 1 MB, any generated directories not covered by `.gitignore`,
@@ -11,9 +12,9 @@ any Python files that do not compile, any reminder markers left in
 text files, and any simple findings (for example, a missing README).
 
 > Built as part of a 30-day portfolio challenge, Nov–Dec 2026.
-> This is the working tool: package layout, CLI entry point,
+> This is the 1.0.0 release: package layout, CLI entry point,
 > read-only scanner, ten checks, text/JSON output, strict mode,
-> and pytest tests. More checks are planned.
+> and 220 pytest tests. A configuration file is still planned.
 
 ## Problem
 
@@ -51,14 +52,14 @@ Example output (`repodoctor .` on this repository):
 ```text
 RepoDoctor — /home/awais/repodoctor-cli
   Summary
-  Files:        39
-  Python files: 20
+  Files:        50
+  Python files: 25
   README:       yes (README.md)
   Gitignore:    yes (.gitignore)
   Dependency:   pyproject.toml
-  Test files:   13
+  Test files:   18
   Large files:  none
-  Generated dirs: .pytest_cache, .venv, src/repodoctor/__pycache__, tests/__pycache__
+  Generated dirs: .pytest_cache, .venv, src/repodoctor/__pycache__, tests/__pycache__, tests/fixtures/sample-project/tests/__pycache__
   Syntax errors: none
   TODO markers: none
   Findings:     none
@@ -188,7 +189,7 @@ Short example (a folder with two files, a missing README, no
 {
   "tool": "repodoctor",
   "schema_version": 1,
-  "tool_version": "0.1.0",
+  "tool_version": "1.0.0",
   "target": "/home/awais/my-project",
   "total_files": 2,
   "python_files": 1,
@@ -271,12 +272,16 @@ directories are recognised with either separator.
 python -m pytest -q
 ```
 
-The suite covers the scanner, every check, both reporters and
-strict mode with unit tests, plus end-to-end tests
+The suite has 220 tests. It covers the scanner, every check, both
+reporters and strict mode with unit tests, plus end-to-end tests
 (`tests/test_cli_integration.py`) that run the real installed
 `repodoctor` command as a subprocess against temporary folders —
 including a scan of the tool's own repository, which must come back
-clean. Report readability has its own tests
+clean — and end-to-end tests on a shipped sample project
+(`tests/test_end_to_end.py` with the fixture in
+`tests/fixtures/sample-project/`), which run the installed command
+against the healthy fixture and a messy copy of it in text and JSON,
+strict and non-strict. Report readability has its own tests
 (`tests/test_readability.py`): the Summary heading, the closing
 line for clean and finding cases, blank lines between severity
 groups, wrapped long messages, and the JSON output staying
@@ -284,7 +289,12 @@ unchanged. Cross-platform path handling has its own tests
 (`tests/test_cross_platform.py`), and the read-only promise has its
 own (`tests/test_readonly.py`): a scan must leave the scanned folder
 byte-identical, create no bytecode files, and succeed on a
-read-only directory. The JSON report structure has its own tests
+read-only directory. Symlink safety has its own tests
+(`tests/test_symlinks.py`): a scan never follows a link out of the
+folder it was asked to scan. Self-scans have their own tests
+(`tests/test_self_scan.py`): the installed command against this
+repository in every output mode, with every JSON path relative.
+The JSON report structure has its own tests
 (`tests/test_json_schema.py`): the top-level keys, the type of every
 field, and the summary counts matching the findings list, on a clean
 repo and on a repo with findings of every severity. Strict-mode exit
@@ -293,6 +303,9 @@ and error-only folders and for usage errors in both output modes.
 Every check also has direct unit tests (`tests/test_check_units.py`)
 and scanner edge-case tests (`tests/test_check_edges.py`), including
 the file-count boundaries and files named like skipped directories.
+A clean-environment smoke test (`scripts/smoke-test.sh`) installs
+the tool into a fresh virtual environment and runs the installed
+command in every mode.
 
 The repository includes a CI workflow (`.github/workflows/ci.yml`)
 that runs the tests on Python 3.11 and 3.12, along with the linter
@@ -311,6 +324,9 @@ ruff format --check .
 
 - Only the ten checks above.
 - No configuration file yet.
+- Symbolic links are not followed — a link to a file or a folder
+  is skipped, so a scan never reads outside the folder it was
+  asked to scan.
 - The scanner skips `.git`, `.venv`, `venv`, `__pycache__`, `.tox`,
   `.mypy_cache`, `.pytest_cache`, `dist` and `build` directories when
   counting files, so large files inside those directories are never

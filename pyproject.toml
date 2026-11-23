@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "repodoctor"
-version = "0.1.0"
+version = "1.0.0"
 description = "A command-line repository health checker for Python projects."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -12,7 +12,7 @@ license = "MIT"
 authors = [{name = "Awais Sabit", email = "awaissabit@gmail.com"}]
 keywords = ["cli", "repository", "health-check", "python"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",

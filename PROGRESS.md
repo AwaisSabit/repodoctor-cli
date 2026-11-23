@@ -992,3 +992,227 @@ before anything new was written:
 
 ### Next steps
 - Configuration file support, per the plan.
+
+## Day 14 — 2026-11-23 (final security, config and leakage review; production-like run)
+
+### Security review — one real leak found and fixed
+- The scanner was re-audited call by call: it only uses `rglob`,
+  `stat`, `is_dir`, `is_file` and `read_text`, and `compile()` on
+  source text never writes bytecode or runs code — but it followed
+  symbolic links to files. A link inside the scanned folder could
+  point outside it, and the tool would read that outside file and
+  report on it: reproduced before the fix with a link to a file
+  outside the target carrying a reminder marker, which the scan
+  reported as `linkfile.py (1)`. Directory links were already
+  safe on Python 3.12 (`rglob` does not follow them there), but
+  the project supports Python 3.11 too, where it does follow
+  them, so the fix covers both.
+- The fix, in `scanner.py`: every path the walk meets is skipped
+  when `path.is_symlink()` is true, before the directory/file
+  branches — a link to a file is never counted or read, a link to
+  a folder is never descended into, and a link that loops back
+  into the scanned folder cannot loop the walk. Six new tests in
+  `tests/test_symlinks.py` cover it: a link to an outside file is
+  not counted and its marker is not reported; a link to an outside
+  folder is not descended into; a loop back into the target
+  finishes and counts real files once; a link to a file already
+  inside the target is not counted twice; a scan with links
+  leaves everything untouched (the outside file keeps its
+  contents and modification time, no new file appears); and a
+  link named like a generated directory (`.venv`) is not recorded
+  as one. The README Limitations list now says links are not
+  followed. No other write, delete or execute path exists in the
+  scanner, the checks, the reporters or the CLI.
+
+### Configuration review
+- `pyproject.toml` was re-read end to end: `requires-python =
+  ">=3.11"` matches the CI matrix (3.11 and 3.12) and the ruff
+  target; the license is MIT with no conflicting classifier (the
+  Day 1 PEP 639 fix still holds); the README, homepage URL,
+  author, keywords and entry point are all correct; the `test`
+  and `dev` extras match what CI installs (`.[test,dev]`); and
+  setuptools finds the package under `src/`. One thing changes
+  with the release, not here: the "Development Status :: 3 -
+  Alpha" classifier becomes "5 - Production/Stable" when the
+  version becomes 1.0.0.
+
+### Output leakage review
+- Text and JSON output were checked for absolute paths and
+  internal information. Only `target` is absolute, and it is the
+  folder the user asked to scan, shown back to them. Every other
+  path in both formats is relative to the target with forward
+  slashes; the JSON `files` list, README, gitignore, dependency
+  file, large files, generated directories, syntax errors,
+  markers and finding paths are all relative. Syntax-error
+  messages carry only the relative file, the line and the Python
+  error text. Nothing else internal appears: no host name, no
+  user name, no absolute path, no environment value. Six new
+  tests in `tests/test_self_scan.py` lock this in on the real
+  installed command: the own repository scanned in all four
+  modes (text/JSON, strict/non-strict) exits 0 with no findings,
+  every JSON path is relative, and the absolute repository path
+  appears exactly once in the JSON output, as `target`.
+
+### Production-like run
+- The real installed command was run against this repository and
+  against a second real repository, `ticketsense-ml`, in all
+  four modes (text and JSON, strict and non-strict):
+  - Own repository: text exit 0, "Found no findings.",
+    "The repository looks healthy — nothing needs fixing.";
+    strict exit 0; JSON strict valid, summary all zeros,
+    `tool_version` 0.1.0.
+  - `ticketsense-ml`: 54 files, 26 Python files, README yes,
+    Gitignore yes, Dependency `pyproject.toml`, Test files 16,
+    Large files none, Generated dirs `.pytest_cache`, `.venv`,
+    `src/ticketsense/__pycache__`, `tests/__pycache__`, Syntax
+    errors none, TODO markers none, "Findings: none",
+    "Found no findings." — exit 0 in all four modes, JSON
+    summary all zeros, findings empty.
+
+### Tests / checks run (Day 14, so far)
+- `.venv/bin/python -m pytest -q` → **211 passed in 5.75s**
+  (199 existing tests + 6 symlink tests in
+  `tests/test_symlinks.py` + 6 self-scan tests in
+  `tests/test_self_scan.py`).
+- `.venv/bin/ruff check .` — all checks passed.
+- `.venv/bin/ruff format --check .` — 24 files already formatted.
+- `.venv/bin/python -m repodoctor .` — exit 0; reported 41 files,
+  22 Python files, README yes, Gitignore yes (`.gitignore`),
+  Dependency `pyproject.toml`, Test files 15, Large files none,
+  Generated dirs `.pytest_cache`, `.venv`,
+  `src/repodoctor/__pycache__`, `tests/__pycache__`, Syntax
+  errors none, TODO markers none, "Findings: none",
+  "Found no findings."
+- `.venv/bin/python -m repodoctor . --strict` — exit 0 on the
+  clean repo.
+- `.venv/bin/python -m repodoctor . --format json` — valid JSON,
+  exit 0, `schema_version` 1, `findings: []`.
+- `git diff --check` — clean. No secrets in the tree; `.venv/` is
+  ignored. The new test files contain no literal reminder-marker
+  text, so the tool still reports no findings on its own repository.
+
+### Clean-environment smoke test
+- A new `scripts/smoke-test.sh` builds a fresh virtual
+  environment (default `$HOME/.repodoctor-smoke-venv`, removed
+  again when the test passes), installs RepoDoctor from this
+  repository into it with `pip install -e .`, and runs the
+  installed `repodoctor` command against a small healthy sample
+  project and a messy one: `--version`, text and JSON scans,
+  strict and non-strict, with the expected exit code checked at
+  every step. It was run for real and every step passed:
+  installed into the fresh venv; version printed; healthy project
+  text scan exit 0 with "Found no findings."; JSON scan exit 0
+  with an all-zero summary; strict scan exit 0; messy project
+  text scan exit 0 without strict; strict scan exit 1; strict
+  JSON scan exit 1. The script itself contains no literal
+  reminder-marker text (the marker in the messy project is built
+  from pieces), so the tool still reports no findings on its own
+  repository — the self-scan now counts 42 files.
+
+## Day 15 — 2026-11-23 (release 1.0.0 — completed early, at Sir Awais's request)
+
+### Release notes — v1.0.0
+- RepoDoctor 1.0.0 is the first stable release: a command-line
+  repository health checker for Python projects. It scans a folder
+  read-only — it never writes, deletes or executes anything in the
+  scanned repository, and it never follows symbolic links, so a
+  scan cannot read outside the folder it was asked to scan — and
+  reports basic project hygiene in plain text or JSON.
+- What it checks (ten checks): a README exists; the directory is
+  not empty; at least one Python file exists; a `.gitignore`
+  exists with the common Python exclusions; a dependency file
+  exists; tests exist; no file is larger than 1 MB; generated or
+  cache directories are covered by `.gitignore`; every Python
+  file compiles (files are only compiled, never run); and
+  reminder markers in text files are counted and reported as
+  information only.
+- Output: a readable text report (facts under a Summary heading,
+  findings grouped by severity with a closing line saying what to
+  do next, long messages wrapped at 88 characters, colour only
+  on a terminal) and a versioned JSON report (`schema_version`
+  1) with every scan fact and a summary count object, so the two
+  formats always agree. `--strict` exits 1 when anything is
+  found, for scripts and CI. Exit codes: 0 the scan ran, 1 strict
+  mode found something, 2 a usage problem. Paths use forward
+  slashes on every platform, and the JSON report carries only
+  relative paths — the absolute path of the scanned folder
+  appears exactly once, as `target`.
+- Quality: 220 tests pass (unit tests for every check, scanner
+  edge cases, both reporters, strict-mode exit codes, the JSON
+  schema, cross-platform paths, the read-only promise, symlink
+  safety, readability, and end-to-end tests that run the real
+  installed command on a shipped sample project and on a messy
+  copy of it). `ruff check` and `ruff format --check` are clean.
+  A clean-environment smoke test (`scripts/smoke-test.sh`)
+  installs from a fresh virtual environment and runs the
+  installed command in every mode. The CI workflow
+  (`.github/workflows/ci.yml`) runs the tests, the linter and the
+  formatter check on Python 3.11 and 3.12 on every push and pull
+  request — it is in the repository but not on GitHub yet, and
+  starts running once the file has been added there.
+- Install: Python 3.11 or newer, `pip install -e .` from a
+  clone, then `repodoctor .` — or `repodoctor ./my-project
+  --format json` and `repodoctor ./my-project --strict`.
+- Known limitations: only the ten checks above; no
+  configuration file yet; generated directories are skipped when
+  counting files, so large files inside them are never flagged;
+  symbolic links are not followed.
+
+### Done
+- End-to-end tests on a shipped fixture repository
+  (`tests/fixtures/sample-project/`, a small healthy project
+  with a README, `.gitignore`, dependency file, one module and
+  one test): seven new tests in `tests/test_end_to_end.py` run
+  the real installed command against the fixture and against a
+  messy copy of it — text and JSON, strict and non-strict —
+  checking exit codes, exact counts and output, and that a scan
+  leaves the scanned folder byte-identical. The fixture's own
+  test (`tests/test_app.py`) checks its README names the
+  project, so the fixture is a real project, not just files.
+- Version bumped to 1.0.0 in `pyproject.toml` and
+  `src/repodoctor/__init__.py`, the development-status
+  classifier changed from Alpha to Production/Stable, and the
+  README JSON example updated to `tool_version` 1.0.0. A new
+  release-gate test locks the version: the package and the
+  installed command must both report exactly 1.0.0.
+- No day numbers in the README, as always.
+
+### Tests / checks run (Day 15, so far)
+- `.venv/bin/python -m pytest -q` → **220 passed in 10.41s**
+  (219 existing tests + 1 new release-gate test in
+  `tests/test_end_to_end.py`).
+- `.venv/bin/ruff check .` — all checks passed.
+- `.venv/bin/ruff format --check .` — 28 files already formatted.
+- `.venv/bin/repodoctor --version` — `repodoctor 1.0.0`.
+- `.venv/bin/python -m repodoctor . --format json` — valid JSON,
+  exit 0, `schema_version` 1, `tool_version` "1.0.0",
+  `findings: []`, summary all zeros.
+- `git diff --check` — clean. No secrets in the tree; `.venv/` is
+  ignored. The new test files contain no literal reminder-marker
+  text, so the tool still reports no findings on its own repository.
+
+### Final README polish and clone-and-run verification
+- The README was polished for the release: the introduction
+  now names the 1.0.0 release and the 220 tests, the self-scan
+  example matches a real scan of this repository exactly (50
+  files, 25 Python files, 18 test files), the findings example
+  was re-checked against a real messy folder and still matches
+  exactly, and the Tests section names every test module
+  including the symlink, self-scan and end-to-end tests, the
+  shipped fixture and the smoke-test script. No day numbers in
+  the README, as always.
+- Clone-and-run verified for real: the repository was cloned
+  fresh from the release commit into a new folder, a new virtual
+  environment was created, and `pip install -e ".[test,dev]"`
+  was run from the clone. In the clone: the full suite passed
+  (220 tests), `ruff check` and `ruff format --check` were
+  clean, `repodoctor --version` printed `repodoctor 1.0.0`, a
+  scan of the clone itself reported 48 files, 25 Python files
+  and 18 test files with no findings and exit 0, and a strict
+  JSON scan returned valid JSON with `tool_version` 1.0.0 and
+  an all-zero summary. The clone reported 48 files against 50
+  in the working tree because the working tree holds linter
+  cache files the fresh clone had not built yet — the README
+  example numbers are the working-tree scan, as on earlier days.
+  The clone and its virtual environment were removed after the
+  check.

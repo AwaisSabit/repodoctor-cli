@@ -1,7 +1,10 @@
 """Read-only scanner for a target directory.
 
 The scanner never writes to, deletes, or executes anything inside the
-target. It walks the tree with :meth:`pathlib.Path.rglob`, skipping
+target, and it never reads outside it either: symbolic links are not
+followed, so a link pointing outside the scanned folder cannot make
+the tool read — and report on — files the user never asked it to
+scan. It walks the tree with :meth:`pathlib.Path.rglob`, skipping
 version-control and generated directories, and collects basic facts:
 how many files exist, how many are Python files, whether a README
 is present, which files are larger than 1 MB, which generated
@@ -231,6 +234,14 @@ def scan_path(target: str | Path) -> ScanResult:
     result = ScanResult(target=target_path.resolve())
     for path in sorted(target_path.rglob("*")):
         relative = path.relative_to(target_path)
+        # Symbolic links are never followed, whatever they point at:
+        # a link could point outside the scanned folder, and reading
+        # through it would report on files the user never asked the
+        # tool to scan. A link to a folder is skipped the same way,
+        # so the walk never leaves the target tree (this matters on
+        # Python 3.11, where rglob follows folder links).
+        if path.is_symlink():
+            continue
         if path.is_dir():
             # A generated directory is recorded even though its
             # contents are skipped. A generated directory nested
