@@ -8,9 +8,10 @@ in charge of output and exit codes.
 from __future__ import annotations
 
 import json
+import textwrap
 
 from . import __version__
-from .models import ScanResult, human_size
+from .models import Finding, ScanResult, human_size
 
 #: Version of the JSON report format. Bump it when a field is added,
 #: removed or renamed, so CI consumers can tell formats apart.
@@ -37,6 +38,52 @@ SEVERITY_COUNT_WORDS = {
 #: ANSI colour codes for severity labels, used only when the output
 #: goes to a terminal (never when piped) and --no-color was not given.
 SEVERITY_COLOURS = {"error": "31", "warning": "33", "info": "36"}
+
+#: Maximum visible width of one finding line in the text report.
+#: Longer messages wrap onto the next line, lined up under the
+#: message, so the report stays easy to scan in a narrow terminal.
+FINDING_LINE_WIDTH = 88
+
+
+def _closing_line(counts: dict[str, int]) -> str:
+    """Return a plain-English line saying what the numbers mean and
+    what to do next. With no findings the repository is healthy;
+    otherwise the most severe group comes first."""
+    errors = counts.get("error", 0)
+    warnings = counts.get("warning", 0)
+    notes = counts.get("info", 0)
+    if not errors and not warnings and not notes:
+        return "The repository looks healthy — nothing needs fixing."
+    if errors:
+        if warnings or notes:
+            return "Fix the errors first, then look at the rest."
+        return "Fix the errors — that is all that needs attention."
+    if warnings:
+        if notes:
+            return "Start with the warnings — the notes are reminders only."
+        return "Start with the warnings — that is all that needs attention."
+    return "Nothing is broken — the notes are reminders only."
+
+
+def _finding_lines(finding: Finding, use_color: bool) -> list[str]:
+    """Return the lines for one finding, wrapping a long message so
+    no line is wider than :data:`FINDING_LINE_WIDTH`.
+
+    The first line carries the severity label and the finding code;
+    wrapped lines are indented to line up under the message. Colour
+    codes take no visible width, so the wrap is measured on the
+    plain label.
+    """
+    label = _severity_label(finding.severity, use_color)
+    plain_label = f"[{finding.severity}]"
+    prefix = f"      {label} {finding.code}: "
+    indent = " " * (6 + len(plain_label) + 1 + len(finding.code) + 2)
+    wrapped = textwrap.wrap(
+        finding.message, width=FINDING_LINE_WIDTH - len(indent)
+    ) or [""]
+    lines = [prefix + wrapped[0]]
+    lines.extend(indent + part for part in wrapped[1:])
+    return lines
 
 
 def _count_phrase(count: int, singular: str, plural: str) -> str:
@@ -72,10 +119,15 @@ def _severity_label(severity: str, use_color: bool) -> str:
 def format_summary(result: ScanResult, use_color: bool = False) -> str:
     """Return a short human-readable summary of a scan.
 
-    Findings are grouped by severity — errors first, then warnings,
-    then informational notes — each group under its own heading, with
-    a summary count line at the end. When there are no findings the
-    report keeps its friendly ``Findings: none`` message.
+    The report starts with a ``Summary`` of the scan facts, then the
+    findings grouped by severity — errors first, then warnings, then
+    informational notes — each group under its own heading with a
+    blank line between groups, and long messages wrapped so no line
+    is wider than 88 characters. It ends with a summary count line
+    and a plain-English line saying what the numbers mean and what
+    to do next. When there are no findings the report keeps its
+    friendly ``Findings: none`` message and says the repository
+    looks healthy.
     """
     readme = f"yes ({result.readme_path.as_posix()})" if result.readme_path else "yes"
     if not result.has_readme:
@@ -111,6 +163,7 @@ def format_summary(result: ScanResult, use_color: bool = False) -> str:
     )
     lines = [
         f"RepoDoctor — {result.target.as_posix()}",
+        "  Summary",
         f"  Files:        {result.total_files}",
         f"  Python files: {result.python_files}",
         f"  README:       {readme}",
@@ -125,6 +178,7 @@ def format_summary(result: ScanResult, use_color: bool = False) -> str:
     if result.findings:
         lines.append("  Findings:")
         counts: dict[str, int] = {}
+        first_group = True
         for severity in SEVERITY_ORDER:
             group = [
                 finding for finding in result.findings if finding.severity == severity
@@ -132,14 +186,20 @@ def format_summary(result: ScanResult, use_color: bool = False) -> str:
             if not group:
                 continue
             counts[severity] = len(group)
+            if not first_group:
+                # A blank line between groups, so each severity
+                # group is easy to pick out at a glance.
+                lines.append("")
+            first_group = False
             lines.append(f"    {SEVERITY_HEADINGS[severity]} ({len(group)})")
             for finding in group:
-                label = _severity_label(finding.severity, use_color)
-                lines.append(f"      {label} {finding.code}: {finding.message}")
+                lines.extend(_finding_lines(finding, use_color))
         lines.append(f"  {_summary_line(counts)}")
+        lines.append(f"  {_closing_line(counts)}")
     else:
         lines.append("  Findings:     none")
         lines.append(f"  {_summary_line({})}")
+        lines.append(f"  {_closing_line({})}")
     return "\n".join(lines)
 
 

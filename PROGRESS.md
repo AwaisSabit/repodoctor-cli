@@ -802,3 +802,193 @@ before anything new was written:
 
 ### Next steps
 - Configuration file support, per the plan.
+## Day 12 — 2026-11-22 (README and docs polish, full-test bug-fix pass)
+
+### Audit first
+- Read the README against the code and ran the tool end to end
+  before changing anything: a self-scan, text and JSON, strict and
+  non-strict, plus crafted folders — an empty folder, a folder with
+  a broken Python file and a reminder marker, a folder with a file
+  just over 1 MB and one exactly at 1 MB, a folder with spaces in
+  its name and a generated directory but no `.gitignore`, a
+  nonexistent folder, a file given as the target, a broken file
+  that also carries a marker, a non-UTF-8 Python file, and the
+  marker edge cases (lowercase words, a marker word inside a
+  longer word, all four marker words in one file). Almost
+  everything was already correct: the empty folder reports 5
+  warnings and 1 note and exits 0; the broken-file folder matches
+  the README findings example exactly (1 error, 4 warnings,
+  1 note, exit 1 in strict mode); the 1 MB file is flagged and
+  the exactly-1 MB file is not; folders with spaces scan fine; a
+  missing folder and a file target both exit 2 with a clear error
+  and no traceback; a broken file with a marker reports both the
+  error and the note; the JSON example in the README matches a
+  real scan field for field, including the summary of 4 warnings.
+  One real bug turned up (below), and the README example numbers
+  were stale.
+
+### Done
+- Real bug fixed — a plain file named like a skipped directory
+  was silently dropped from the scan. The skipped-directory check
+  looked at every part of a file's path, including the file's own
+  name, so a script called `build` (or `dist`, `venv` and the
+  rest) at the root — or in a subfolder — was never counted: a
+  folder holding `build` and `app.py` reported 1 file instead of
+  2. The fix is one line in `scanner.py`: for files, only the
+  parent directories decide whether the file is skipped
+  (`_is_skipped(relative.parent)`), which is what the generated-
+  directory recording already did. Files inside a real skipped
+  directory are still skipped, and a directory called `build` is
+  still reported as a generated directory. Three regression tests
+  in `tests/test_check_edges.py` cover it: a root file called
+  `build` is counted, a nested one is counted, and files inside a
+  `build` folder stay skipped.
+- README polish — the self-scan example said 21 files, 10 Python
+  files and 3 test files; the real scan now reports 38 files, 19
+  Python files and 12 test files, and the example was updated to
+  match the current output exactly (same generated-directory
+  list too). The CI wording was fixed honestly: it used to say
+  every push and pull request runs the tests through GitHub
+  Actions, which is not true yet — the workflow file
+  (`.github/workflows/ci.yml`) is in the repository but not on
+  GitHub, and the GitHub App cannot add workflow files, so the
+  README now says the workflow starts running once the file has
+  been added there. The Tests section now also names the direct
+  check unit tests (`tests/test_check_units.py`) and the scanner
+  edge-case tests (`tests/test_check_edges.py`). Verified and left
+  alone: "ten checks" matches the ten functions in `CHECKS` and
+  the ten bullets in "What it checks"; the JSON example matches a
+  real scan; the findings example matches a real scan; the
+  Limitations list matches the skipped directories in the code.
+  No day numbers in the README, as always.
+- No new features: configuration file support is still planned,
+  not built — this day was polish and bug fixes only.
+
+### Tests / checks run (Day 12)
+- `.venv/bin/python -m pytest -q` → **186 passed in 1.86s**
+  (183 existing tests + 3 new regression tests in
+  `tests/test_check_edges.py` for the skipped-name fix).
+- `.venv/bin/ruff check .` — all checks passed.
+- `.venv/bin/ruff format --check .` — 21 files already formatted.
+- `.venv/bin/python -m repodoctor .` — exit 0; reported 38 files,
+  19 Python files, README yes, Gitignore yes (`.gitignore`),
+  Dependency `pyproject.toml`, Test files 12, Large files none,
+  Generated dirs `.pytest_cache`, `.venv`,
+  `src/repodoctor/__pycache__`, `tests/__pycache__`, Syntax
+  errors none, TODO markers none, "Findings: none",
+  "Found no findings."
+- `.venv/bin/python -m repodoctor . --strict` — exit 0 on the
+  clean repo.
+- `.venv/bin/python -m repodoctor . --format json` — valid JSON,
+  exit 0, `schema_version` 1, `findings: []`.
+- Crafted-folder checks (in `/tmp`, removed after): empty folder
+  exits 0 with 5 warnings and 1 note; broken-file folder exits 1
+  in strict mode; a file 1 byte over 1 MB is flagged as
+  "1.0 MB" and a file exactly at 1 MB is not; a folder with
+  spaces in its name scans fine; a missing folder and a file
+  target both exit 2 with a clear error; a file called `build`
+  is now counted (2 files, not 1) while files inside a `build`
+  folder stay skipped.
+- `git diff --check` — clean. No secrets in the tree; `.venv/` is
+  ignored. The new tests contain no literal reminder-marker text,
+  so the tool still reports no findings on its own repository.
+
+### Commits
+- See `git log` for the hashes. Three commits, in plain English.
+- Not pushed — the parent pushes to GitHub later.
+
+### Next steps
+- Configuration file support, per the plan.
+
+## Day 13 — 2026-11-23 (text report readability, CI verification)
+
+### Done
+- Text report readability, all in `reporters.py`, with no change to
+  behaviour or exit codes:
+  1. The report now opens with a clear `Summary` heading above the
+     scan facts.
+  2. A plain-English closing line after the summary count says what
+     the numbers mean and what to do next: with no findings it says
+     the repository looks healthy and nothing needs fixing; with
+     findings it points at the most severe group first ("Fix the
+     errors first, then look at the rest.", "Start with the
+     warnings — the notes are reminders only.",
+     "Nothing is broken — the notes are reminders only.", with
+     matching wording for errors-only and warnings-only scans).
+  3. A blank line now separates each severity group, so the groups
+     are easy to pick out at a glance (there was no blank line
+     before — the groups ran straight into each other).
+  4. Long finding messages wrap at 88 visible characters, with the
+     wrapped lines lined up under the message, not under the
+     severity label. Colour still appears only on the severity
+     label, and only when the output goes to a terminal.
+- Verified, not changed: file paths in the report were already
+  relative to the scanned folder (forward slashes on every
+  platform), and the JSON reporter output structure is untouched —
+  `schema_version` stays 1, the finding messages stay unwrapped,
+  and the summary counts still match the text summary line.
+- No existing test needed changing: all 186 tests passed with the
+  new output as-is, because they assert on substrings and counts,
+  not on exact whole-report text.
+- CI workflow verified, not recreated: `.github/workflows/ci.yml`
+  is valid YAML, runs on push and pull request, on Python 3.11 and
+  3.12 (the versions `pyproject.toml` supports), and runs exactly
+  the current commands — `python -m pytest -q`, `ruff check .` and
+  `ruff format --check .` after installing with
+  `pip install -e ".[test,dev]"`. Nothing in it was stale, so no
+  fix was needed and no second workflow file was created.
+  The workflow file is still local-only: it exists in this
+  repository but is not on GitHub, because the GitHub App cannot
+  create workflow files — it has to be added on GitHub by hand,
+  as already noted in the README.
+- Updated the README examples to match the new output exactly
+  (Summary heading, wrapped messages, blank lines between groups,
+  closing lines) and the self-scan example numbers to the current
+  39 files, 20 Python files and 13 test files. The Tests section
+  now names the readability tests. No day numbers in the README,
+  as always.
+
+### Tests / checks run (Day 13)
+- `.venv/bin/python -m pytest -q` → **199 passed in 3.72s**
+  (186 existing tests + 13 new tests in
+  `tests/test_readability.py`: the Summary heading above the facts;
+  the closing line for a clean scan and for errors-first,
+  errors-only, warnings-only, warnings-and-notes and notes-only
+  scans; a blank line between severity groups and none before the
+  first group; long messages wrapped within 88 characters with
+  wrapped lines lined up under the message; short messages staying
+  on one line; colour still only on the label when wrapping; the
+  JSON output keeping `schema_version` 1 and the same unwrapped
+  messages; and the real command on a messy folder showing all of
+  the above while still exiting 0).
+- `.venv/bin/ruff check .` — all checks passed.
+- `.venv/bin/ruff format --check .` — 22 files already formatted.
+- `.venv/bin/python -m repodoctor .` — exit 0; reported 39 files,
+  20 Python files, README yes, Gitignore yes (`.gitignore`),
+  Dependency `pyproject.toml`, Test files 13, Large files none,
+  Generated dirs `.pytest_cache`, `.venv`,
+  `src/repodoctor/__pycache__`, `tests/__pycache__`, Syntax
+  errors none, TODO markers none, "Findings: none",
+  "Found no findings.",
+  "The repository looks healthy — nothing needs fixing."
+- `.venv/bin/python -m repodoctor . --strict` — exit 0 on the
+  clean repo.
+- `.venv/bin/python -m repodoctor . --format json` — valid JSON,
+  exit 0, `schema_version` 1, `findings: []`.
+- A temp folder with a broken Python file, a missing README,
+  `.gitignore`, dependency file and tests, and a file with a
+  reminder marker showed the new output: "Summary" heading,
+  "Errors (1)", a blank line, "Warnings (4)", a blank line,
+  "Notes (1)", wrapped messages, ending with
+  "Found 1 error, 4 warnings and 1 note." and
+  "Fix the errors first, then look at the rest." — exit 0.
+- `git diff --check` — clean. No secrets in the tree; `.venv/` is
+  ignored. The new test file contains no literal reminder-marker
+  text, so the tool still reports no findings on its own repository.
+
+### Commits
+- See `git log` for the hashes. Three commits, in plain English.
+- Not pushed — the parent pushes to GitHub later.
+
+### Next steps
+- Configuration file support, per the plan.

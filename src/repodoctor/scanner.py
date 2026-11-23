@@ -202,8 +202,12 @@ def _path_parts(path: Path) -> tuple[str, ...]:
 def _is_skipped(path: Path) -> bool:
     """Return True if any part of ``path`` is a skipped directory.
 
-    Either separator counts, so a Windows-style path is recognised
-    on Linux and macOS too (see ``_path_parts``).
+    ``path`` is a directory path: for a file, pass its parent, so a
+    plain file that happens to share a skipped directory's name (a
+    script called ``build``, for example) is scanned like any other
+    file instead of being silently dropped. Either separator counts,
+    so a Windows-style path is recognised on Linux and macOS too
+    (see ``_path_parts``).
     """
     return any(part in SKIPPED_DIRS for part in _path_parts(path))
 
@@ -235,7 +239,12 @@ def scan_path(target: str | Path) -> ScanResult:
             if path.name in GENERATED_DIRS and not _is_skipped(relative.parent):
                 result.generated_dirs.append(relative)
             continue
-        if _is_skipped(relative):
+        # Only the file's parent directories decide whether it is
+        # skipped: a plain file named like a skipped directory (a
+        # script called ``build``) is a file, not a directory, and
+        # must still be counted. Files inside a skipped directory
+        # are skipped through their parent.
+        if _is_skipped(relative.parent):
             continue
         if not path.is_file():
             continue

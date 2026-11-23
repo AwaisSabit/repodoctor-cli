@@ -50,26 +50,32 @@ Example output (`repodoctor .` on this repository):
 
 ```text
 RepoDoctor — /home/awais/repodoctor-cli
-  Files:        21
-  Python files: 10
+  Summary
+  Files:        39
+  Python files: 20
   README:       yes (README.md)
   Gitignore:    yes (.gitignore)
   Dependency:   pyproject.toml
-  Test files:   3
+  Test files:   13
   Large files:  none
   Generated dirs: .pytest_cache, .venv, src/repodoctor/__pycache__, tests/__pycache__
   Syntax errors: none
   TODO markers: none
   Findings:     none
   Found no findings.
+  The repository looks healthy — nothing needs fixing.
 ```
 
-Example output on a folder with findings — findings are grouped by
-severity, errors first, then warnings, then informational notes, with
-a summary count at the end:
+Example output on a folder with findings — the report opens with a
+`Summary` of the scan facts, then findings grouped by severity,
+errors first, then warnings, then informational notes, with a blank
+line between groups and long messages wrapped so no line is wider
+than 88 characters. It ends with a summary count and a plain-English
+line saying what to do next:
 
 ```text
 RepoDoctor — /home/awais/my-project
+  Summary
   Files:        2
   Python files: 1
   README:       no
@@ -82,15 +88,27 @@ RepoDoctor — /home/awais/my-project
   TODO markers: notes.txt (1)
   Findings:
     Errors (1)
-      [error] syntax-error: File broken.py has a Python syntax error on line 1: invalid syntax.
+      [error] syntax-error: File broken.py has a Python syntax error on line 1: invalid
+                            syntax.
+
     Warnings (4)
-      [warning] missing-readme: No README file found. Add a README.md describing what this project does.
-      [warning] missing-gitignore: No .gitignore file found. Add one so virtual environments and cache files are not committed by accident.
-      [warning] missing-dependency-file: No dependency file found (pyproject.toml, requirements.txt, setup.py or setup.cfg). Add one so others can install this project's dependencies.
-      [warning] missing-tests: No tests directory or test files found. Add a tests/ folder with at least one test so changes can be checked.
+      [warning] missing-readme: No README file found. Add a README.md describing what
+                                this project does.
+      [warning] missing-gitignore: No .gitignore file found. Add one so virtual
+                                   environments and cache files are not committed by
+                                   accident.
+      [warning] missing-dependency-file: No dependency file found (pyproject.toml,
+                                         requirements.txt, setup.py or setup.cfg). Add
+                                         one so others can install this project's
+                                         dependencies.
+      [warning] missing-tests: No tests directory or test files found. Add a tests/
+                               folder with at least one test so changes can be checked.
+
     Notes (1)
-      [info] todo-markers: File notes.txt contains 1 reminder marker (TODO, FIXME, XXX or HACK). This is information only, not a problem.
+      [info] todo-markers: File notes.txt contains 1 reminder marker (TODO, FIXME, XXX
+                           or HACK). This is information only, not a problem.
   Found 1 error, 4 warnings and 1 note.
+  Fix the errors first, then look at the rest.
 ```
 
 When the text output goes to a terminal, the severity labels
@@ -258,7 +276,11 @@ strict mode with unit tests, plus end-to-end tests
 (`tests/test_cli_integration.py`) that run the real installed
 `repodoctor` command as a subprocess against temporary folders —
 including a scan of the tool's own repository, which must come back
-clean. Cross-platform path handling has its own tests
+clean. Report readability has its own tests
+(`tests/test_readability.py`): the Summary heading, the closing
+line for clean and finding cases, blank lines between severity
+groups, wrapped long messages, and the JSON output staying
+unchanged. Cross-platform path handling has its own tests
 (`tests/test_cross_platform.py`), and the read-only promise has its
 own (`tests/test_readonly.py`): a scan must leave the scanned folder
 byte-identical, create no bytecode files, and succeed on a
@@ -268,11 +290,16 @@ field, and the summary counts matching the findings list, on a clean
 repo and on a repo with findings of every severity. Strict-mode exit
 codes have extra tests (`tests/test_strict_extra.py`) for notes-only
 and error-only folders and for usage errors in both output modes.
+Every check also has direct unit tests (`tests/test_check_units.py`)
+and scanner edge-case tests (`tests/test_check_edges.py`), including
+the file-count boundaries and files named like skipped directories.
 
-Every push and pull request runs the tests on Python 3.11 and 3.12
-through GitHub Actions (`.github/workflows/ci.yml`), along with the
-linter and the formatter check. The lint and format rules live in
-`pyproject.toml` and use ruff:
+The repository includes a CI workflow (`.github/workflows/ci.yml`)
+that runs the tests on Python 3.11 and 3.12, along with the linter
+and the formatter check, on every push and pull request. It starts
+running on GitHub once the workflow file has been added there — it
+is in the repository here, but not on GitHub yet. The lint and
+format rules live in `pyproject.toml` and use ruff:
 
 ```bash
 pip install -e ".[dev]"   # installs ruff

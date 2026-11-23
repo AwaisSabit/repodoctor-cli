@@ -6,7 +6,9 @@ the real repository: the large-file threshold itself, README name
 variants, dependency files outside the root, the remaining ways a
 test file can be recognised, a .gitignore holding only comments,
 files the scanner cannot read as text, marker words that look like
-markers but are not, and the generated directories not yet exercised.
+markers but are not, the generated directories not yet exercised,
+and files named like skipped directories: a script called ``build``
+is a file, not a directory, and must still be counted.
 """
 
 from __future__ import annotations
@@ -301,3 +303,56 @@ def test_multiple_generated_dirs_each_get_a_warning(tmp_path: Path) -> None:
     assert result.generated_dirs == [Path("build"), Path("dist")]
     generated = [f for f in findings if f.code == "generated-dir-not-ignored"]
     assert [f.path for f in generated] == [Path("build"), Path("dist")]
+
+
+# --- Files named like skipped directories ---
+
+
+def test_file_named_like_a_skipped_directory_is_counted(tmp_path: Path) -> None:
+    """A plain file called ``build`` is a file, not a directory.
+
+    The skipped-directory check used to look at every part of a
+    file's path, including its own name, so a script called ``build``
+    (or ``dist``, ``venv`` and the rest) was silently dropped from
+    the file count. Only the parent directories may skip a file.
+    """
+    (tmp_path / "build").write_text("#!/bin/sh\necho hi\n", encoding="utf-8")
+    (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
+
+    result = scan_path(tmp_path)
+
+    assert result.total_files == 2
+    assert result.files == [Path("app.py"), Path("build")]
+
+
+def test_nested_file_named_like_a_skipped_directory_is_counted(
+    tmp_path: Path,
+) -> None:
+    """A file called ``build`` inside a normal folder is counted too."""
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "build").write_text("build this\n", encoding="utf-8")
+    (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
+
+    result = scan_path(tmp_path)
+
+    assert result.total_files == 2
+    assert Path("src/build") in result.files
+
+
+def test_files_inside_a_skipped_directory_are_still_skipped(
+    tmp_path: Path,
+) -> None:
+    """The fix must not let files inside a real ``build`` folder in.
+
+    A file under a directory called ``build`` is still skipped, even
+    though a file called ``build`` itself is now counted.
+    """
+    (tmp_path / "build").mkdir()
+    (tmp_path / "build" / "output.txt").write_text("built\n", encoding="utf-8")
+    (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
+
+    result = scan_path(tmp_path)
+
+    assert result.total_files == 1
+    assert result.files == [Path("app.py")]
+    assert result.generated_dirs == [Path("build")]
